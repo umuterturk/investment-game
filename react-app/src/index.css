@@ -1,0 +1,94 @@
+/* Base styles */
+body {
+  margin: 0;
+  font-family: 'VT323', monospace, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #282c34;
+  color: #e0e0e0;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+/* Import Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+@import url('https://fonts.googleapis.com/icon?family=Material+Icons');
+
+/* Global styles */
+* {
+  box-sizing: border-box;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'VT323', monospace;
+  margin-top: 0;
+}
+
+button {
+  font-family: 'VT323', monospace;
+  cursor: pointer;
+}
+
+/* Pixel button style */
+.pixel-btn {
+  background-color: #4a4a4a;
+  border: none;
+  color: white;
+  padding: 10px 15px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 16px;
+  margin: 4px 2px;
+  cursor: pointer;
+  border-radius: 0;
+  box-shadow: 
+    inset -2px -2px 0 0 #1a1a1a,
+    inset 2px 2px 0 0 #8a8a8a;
+  transition: all 0.1s;
+}
+
+.pixel-btn:hover {
+  background-color: #5a5a5a;
+}
+
+.pixel-btn:active {
+  background-color: #3a3a3a;
+  box-shadow: 
+    inset 2px 2px 0 0 #1a1a1a,
+    inset -2px -2px 0 0 #8a8a8a;
+}
+
+/* Material icons */
+.material-icons {
+  vertical-align: middle;
+  margin-right: 5px;
+}
+
+/* Detail items in modals */
+.detail-item {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding: 5px 0;
+  border-bottom: 1px solid #444;
+}
+
+.detail-item .label {
+  font-weight: bold;
+}
+
+.detail-section {
+  margin-top: 20px;
+}
+
+.detail-section h4 {
+  border-bottom: 2px solid #555;
+  padding-bottom: 5px;
+  margin-bottom: 10px;
+}

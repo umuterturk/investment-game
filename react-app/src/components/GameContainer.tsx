@@ -1,0 +1,78 @@
+import React from 'react';
+import GameHeader from './GameHeader';
+import ActionPanel from './ActionPanel';
+import Notifications from './Notifications';
+import Modal from './Modal';
+import { useGameContext } from '../context/GameContext';
+import { GAME_DATA } from '../data/gameData';
+import '../styles/GameContainer.css';
+
+export const GameContainer: React.FC = () => {
+    const { game, isModalOpen, modalContent, modalTitle, closeModal } = useGameContext();
+
+    return (
+        <div className="game-container">
+            <GameHeader />
+            
+            <div className="game-content">
+                <main className="game-main">
+                    <ActionPanel />
+                    
+                    <div className="info-panel">
+                        <Notifications />
+                        
+                        <div className="monthly-summary">
+                            <h3>Monthly Summary</h3>
+                            <div className="summary-items-container">
+                                <div className="summary-item">
+                                    <span className="material-icons">work</span>
+                                    <div>
+                                        <div className="label">Income</div>
+                                        <span>£{game.player.monthlyIncome.toFixed(0)}</span>
+                                    </div>
+                                </div>
+                                <div className="summary-item">
+                                    <span className="material-icons">shopping_cart</span>
+                                    <div>
+                                        <div className="label">Expenses</div>
+                                        <span>£{game.player.getTotalExpenses().toFixed(0)}</span>
+                                    </div>
+                                </div>
+                                <div className="summary-item">
+                                    <span className="material-icons">savings</span>
+                                    <div>
+                                        <div className="label">Interest</div>
+                                        <span>£{(game.player.savings * (GAME_DATA.interestRates[game.player.currentYear] || 0) * 0.7 / 100 / 12).toFixed(0)}</span>
+                                    </div>
+                                </div>
+                                <div className="summary-item">
+                                    <span className="material-icons">home</span>
+                                    <div>
+                                        <div className="label">Rental</div>
+                                        <span>£{game.player.properties.reduce((sum, property) => 
+                                            sum + (property.isRental && property.rentalIncome ? property.rentalIncome : 0), 0).toFixed(0)}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div className="mini-charts">
+                            <h3>Market Trends</h3>
+                            <div className="chart-placeholder">
+                                <p>Charts will be implemented here.</p>
+                            </div>
+                        </div>
+                    </div>
+                </main>
+            </div>
+            
+            {isModalOpen && (
+                <Modal onClose={closeModal} title={modalTitle}>
+                    {modalContent}
+                </Modal>
+            )}
+        </div>
+    );
+};
+
+export default GameContainer; 

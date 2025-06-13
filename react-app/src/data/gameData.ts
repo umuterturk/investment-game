@@ -1,12 +1,51 @@
 // Game Data - UK Economic Data (2005-2024)
-const GAME_DATA = {
+
+// Define interfaces for the data structures
+interface InterestRates {
+    [key: number]: number;
+}
+
+interface CapitalGainsTax {
+    [key: number]: { 
+        allowance: number;
+        basicRate: number;
+        higherRate: number;
+    };
+}
+
+interface InflationRates {
+    [key: number]: number;
+}
+
+interface YearlyPrices {
+    [key: number]: number;
+}
+
+interface RegionalPrices {
+    [key: string]: YearlyPrices;
+}
+
+interface TaxBracket {
+    threshold: number;
+    rate: number;
+}
+
+interface IncomeTaxRates {
+    [key: number]: TaxBracket[];
+}
+
+interface Salaries {
+    [key: number]: number;
+}
+
+export const GAME_DATA = {
     // Game Configuration
     config: {
         startYear: 2005,
         startMonth: 0, // January
         startAge: 25,
         endAge: 45,
-        startingCash: 10000,
+        startingCash: 50000,
         timePerMonth: 15000, // 15 seconds per month in normal speed
         fastTimePerMonth: 3000, // 3 seconds per month in fast speed
         monthNames: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
@@ -20,7 +59,7 @@ const GAME_DATA = {
         2010: 0.50, 2011: 0.50, 2012: 0.50, 2013: 0.50, 2014: 0.50,
         2015: 0.50, 2016: 0.25, 2017: 0.50, 2018: 0.75, 2019: 0.75,
         2020: 0.10, 2021: 0.10, 2022: 3.50, 2023: 5.25, 2024: 5.00
-    },
+    } as InterestRates,
     
     // Capital Gains Tax rates (UK)
     capitalGainsTax: {
@@ -30,7 +69,7 @@ const GAME_DATA = {
         2015: { allowance: 11100, basicRate: 0.18, higherRate: 0.28 },
         2020: { allowance: 12300, basicRate: 0.10, higherRate: 0.20 },
         2024: { allowance: 3000, basicRate: 0.10, higherRate: 0.20 }
-    },
+    } as CapitalGainsTax,
     
     // Inflation Data (CPI)
     inflation: {
@@ -39,7 +78,7 @@ const GAME_DATA = {
         2010: 3.3, 2011: 4.5, 2012: 2.8, 2013: 2.6, 2014: 1.5,
         2015: 0.0, 2016: 0.7, 2017: 2.7, 2018: 2.5, 2019: 1.8,
         2020: 0.9, 2021: 2.6, 2022: 9.1, 2023: 7.0, 2024: 3.2
-    },
+    } as InflationRates,
     
     // House Price Data (£ per square meter)
     housePrice: {
@@ -62,7 +101,6 @@ const GAME_DATA = {
             2015: 3100, 2016: 3300, 2017: 3400, 2018: 3500, 2019: 3500,
             2020: 3600, 2021: 3900, 2022: 4100, 2023: 4000, 2024: 3900
         },
-        // Other regions follow similar pattern with appropriate values
         'South West': {
             2005: 2000, 2006: 2100, 2007: 2200, 2008: 2100, 2009: 2000,
             2010: 2100, 2011: 2200, 2012: 2300, 2013: 2400, 2014: 2500,
@@ -81,7 +119,7 @@ const GAME_DATA = {
             2015: 1900, 2016: 2000, 2017: 2100, 2018: 2200, 2019: 2200,
             2020: 2300, 2021: 2500, 2022: 2700, 2023: 2600, 2024: 2500
         }
-    },
+    } as RegionalPrices,
     
     // Rent Prices (£ per month for 1-bedroom flat)
     rentPrice: {
@@ -121,7 +159,7 @@ const GAME_DATA = {
             2015: 800, 2016: 850, 2017: 900, 2018: 950, 2019: 1000,
             2020: 980, 2021: 950, 2022: 1050, 2023: 1100, 2024: 1150
         }
-    },
+    } as RegionalPrices,
     
     // Stock Data - 10 UK Stocks (FTSE 100 companies)
     stocks: {
@@ -186,7 +224,7 @@ const GAME_DATA = {
             2015: 2000, 2016: 3200, 2017: 3900, 2018: 3800, 2019: 4600,
             2020: 5600, 2021: 5000, 2022: 5800, 2023: 5400, 2024: 5100
         }
-    },
+    } as RegionalPrices,
     
     // Income Tax Brackets (UK)
     incomeTax: {
@@ -221,7 +259,7 @@ const GAME_DATA = {
             { threshold: 50270, rate: 0.40 },
             { threshold: 125140, rate: 0.45 }
         ]
-    },
+    } as IncomeTaxRates,
     
     // Average Salaries by Year (UK, annual gross)
     salaries: {
@@ -245,7 +283,7 @@ const GAME_DATA = {
         2022: 38000,
         2023: 40000,
         2024: 42000
-    },
+    } as Salaries,
     
     // Random Events
     events: [
@@ -254,7 +292,7 @@ const GAME_DATA = {
             name: 'House Fire',
             description: 'A fire has damaged your property!',
             probability: 0.002, // 0.2% chance per month
-            effect: (player) => {
+            effect: (player: any) => {
                 if (player.properties.length > 0) {
                     const property = player.properties[Math.floor(Math.random() * player.properties.length)];
                     const damage = property.value * 0.15;
@@ -278,7 +316,7 @@ const GAME_DATA = {
             name: 'Medical Emergency',
             description: 'You had a medical emergency!',
             probability: 0.003, // 0.3% chance per month
-            effect: (player) => {
+            effect: (player: any) => {
                 const cost = 500 + Math.random() * 2000;
                 if (player.insurance.health) {
                     return {
@@ -298,7 +336,7 @@ const GAME_DATA = {
             name: 'Job Loss',
             description: 'You lost your job!',
             probability: 0.001, // 0.1% chance per month
-            effect: (player) => {
+            effect: (player: any) => {
                 const monthsWithoutJob = 1 + Math.floor(Math.random() * 3);
                 return {
                     message: `You lost your job and will be without income for ${monthsWithoutJob} months.`,
@@ -311,7 +349,7 @@ const GAME_DATA = {
             name: 'Stock Market Crash',
             description: 'The stock market crashed!',
             probability: 0.001, // 0.1% chance per month
-            effect: (player) => {
+            effect: (player: any) => {
                 return {
                     message: `A stock market crash has occurred! Your stock portfolio value has dropped significantly.`,
                     marketCrash: true
@@ -323,7 +361,7 @@ const GAME_DATA = {
             name: 'Divorce',
             description: 'Your marriage ended in divorce.',
             probability: 0.001, // 0.1% chance per month
-            effect: (player) => {
+            effect: (player: any) => {
                 if (player.married) {
                     return {
                         message: `Your marriage has ended in divorce. Half of your assets will be divided.`,
@@ -338,7 +376,7 @@ const GAME_DATA = {
             name: 'Traffic Accident',
             description: 'You had a car accident!',
             probability: 0.002, // 0.2% chance per month
-            effect: (player) => {
+            effect: (player: any) => {
                 if (player.car) {
                     const damage = player.car.value * 0.2;
                     if (player.insurance.car) {
@@ -361,7 +399,7 @@ const GAME_DATA = {
             name: 'Home Repair',
             description: 'Your home needs urgent repairs!',
             probability: 0.003, // 0.3% chance per month
-            effect: (player) => {
+            effect: (player: any) => {
                 if (player.properties.length > 0) {
                     const property = player.properties[Math.floor(Math.random() * player.properties.length)];
                     const repairCost = property.value * 0.03;
@@ -378,7 +416,7 @@ const GAME_DATA = {
             name: 'Unexpected Child',
             description: 'You have a child!',
             probability: 0.001, // 0.1% chance per month
-            effect: (player) => {
+            effect: (player: any) => {
                 if (player.age >= 25 && player.age <= 40) {
                     return {
                         message: `Congratulations! You have a child. This will increase your monthly expenses by £500.`,
@@ -393,7 +431,7 @@ const GAME_DATA = {
             name: 'Inheritance',
             description: 'You received an inheritance!',
             probability: 0.0005, // 0.05% chance per month
-            effect: (player) => {
+            effect: (player: any) => {
                 const amount = 5000 + Math.random() * 20000;
                 return {
                     message: `You received an inheritance of £${amount.toFixed(0)}.`,
@@ -406,7 +444,7 @@ const GAME_DATA = {
             name: 'Theft',
             description: 'You were a victim of theft!',
             probability: 0.002, // 0.2% chance per month
-            effect: (player) => {
+            effect: (player: any) => {
                 const amount = 500 + Math.random() * 1500;
                 if (player.insurance.contents) {
                     return {

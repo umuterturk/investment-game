@@ -1,0 +1,191 @@
+.housing-market {
+  padding: 20px;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.housing-options {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.housing-section {
+  margin-bottom: 20px;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  background-color: #444;
+  cursor: pointer;
+  border-radius: 5px;
+  margin-bottom: 10px;
+}
+
+.section-header h3 {
+  margin: 0;
+}
+
+.section-header:hover {
+  background-color: #555;
+}
+
+.section-header .material-icons {
+  font-size: 24px;
+  transition: transform 0.3s ease;
+}
+
+.section-header.expanded .material-icons {
+  transform: rotate(180deg);
+}
+
+.houses-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+  padding: 10px;
+}
+
+.house-card {
+  background-color: #333;
+  border-radius: 8px;
+  overflow: hidden;
+  transition: all 0.5s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.house-card.selected {
+  background-color: #2a2a2a;
+}
+
+.house-summary {
+  padding: 15px;
+  cursor: pointer;
+}
+
+.house-summary:hover {
+  background-color: #444;
+}
+
+.selected .house-summary:hover {
+  background-color: #2a2a2a;
+}
+
+.house-summary h4 {
+  margin: 0 0 10px 0;
+  color: #3498db;
+}
+
+.house-summary p {
+  margin: 5px 0;
+  color: #e0e0e0;
+}
+
+.house-details-modal {
+  padding: 0;
+  background-color: #2a2a2a;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+}
+
+.selected .house-details-modal {
+  max-height: 500px; /* Adjust this value based on your content */
+}
+
+.house-details-modal h4 {
+  color: #e0e0e0;
+  margin: 5px 0 5px 0;
+}
+
+.mortgage-calculator,
+.rental-details {
+  padding: 0;
+}
+
+.mortgage-calculator p, .rental-details p {
+  margin: 8px 0;
+  color: #ccc;
+}
+
+.down-payment-slider {
+  margin: 15px 0;
+}
+
+.down-payment-slider label {
+  display: block;
+  margin-bottom: 10px;
+}
+
+.down-payment-slider input[type="range"] {
+  width: 90%;
+  margin: 10px 0;
+}
+
+button {
+  background-color: #3498db;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  width: 100%;
+  margin-top: 10px;
+  transition: background-color 0.3s ease;
+}
+
+button:hover {
+  background-color: #2980b9;
+}
+
+button.disabled,
+button:disabled {
+  background-color: #666;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+button.disabled:hover,
+button:disabled:hover {
+  background-color: #666;
+}
+
+.error-message {
+  color: #e74c3c;
+  font-size: 0.9em;
+  margin: 5px 0;
+}
+
+.close-button {
+  background: #e74c3c;
+  margin-top: 10px;
+}
+
+.close-button:hover {
+  background: #c0392b;
+}
+
+.material-icons {
+  transition: transform 0.3s ease;
+}
+
+.expanded .material-icons {
+  transform: rotate(180deg);
+}
+
+@media (max-width: 768px) {
+  .housing-options {
+    flex-direction: column;
+  }
+  
+  .housing-section {
+    width: 100%;
+  }
+  
+  .houses-grid {
+    grid-template-columns: 1fr;
+  }
+} 

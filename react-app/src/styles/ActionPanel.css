@@ -1,0 +1,39 @@
+.action-panel {
+    width: 250px;
+    background-color: #333;
+    padding: 15px;
+    border-radius: 5px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+    min-height: min-content;
+}
+
+.action-panel h2 {
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #444;
+    text-align: center;
+}
+
+.action-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.action-buttons .pixel-btn {
+    width: 100%;
+    text-align: center;
+    font-size: 18px;
+    padding: 12px;
+}
+
+@media (max-width: 768px) {
+    .action-panel {
+        width: 100%;
+    }
+    
+    .action-buttons {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    }
+} 

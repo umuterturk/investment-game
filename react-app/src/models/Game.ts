@@ -1,0 +1,1236 @@
+import { Player } from './Player';
+import { GameState, EventHistoryItem, NewsEvent, RandomEventEffect, Housing, HousingMarket } from './types';
+import { GAME_DATA } from '../data/gameData';
+import { NEWS_EVENTS } from '../data/newsData';
+
+export class Game {
+    player: Player;
+    gameState: GameState;
+    previousGameState: GameState | null;
+    timePerDay: number;
+    notifications: string[];
+    eventHistory: EventHistoryItem[];
+    shownNews: string[];
+    gameInterval: NodeJS.Timeout | null;
+    soundEnabled: boolean;
+    savedGames: { name: string, date: string, data: string }[];
+    housingMarket: HousingMarket;
+
+    constructor() {
+        console.log("Creating new Game instance");
+        this.player = new Player();
+        this.gameState = GameState.PAUSED;
+        this.previousGameState = null;
+        this.timePerDay = GAME_DATA.config.timePerMonth / 30; // Time per day in milliseconds
+        this.notifications = [];
+        this.eventHistory = [];
+        this.shownNews = [];
+        this.gameInterval = null;
+        this.soundEnabled = true;
+        this.loadSoundSetting();
+        this.savedGames = this.getSavedGames();
+        this.housingMarket = this.generateInitialHousingMarket();
+    }
+
+    setGameState(newState: GameState): void {
+        // Clear any existing interval
+        if (this.gameInterval) {
+            clearInterval(this.gameInterval);
+            this.gameInterval = null;
+        }
+        
+        this.gameState = newState;
+        
+        switch (newState) {
+            case GameState.PAUSED:
+                break;
+            case GameState.RUNNING:
+                this.gameInterval = setInterval(() => this.update(), this.timePerDay);
+                break;
+            case GameState.FAST:
+                this.gameInterval = setInterval(() => this.update(), this.timePerDay / 3);
+                break;
+            case GameState.ENDED:
+                this.endGame();
+                break;
+        }
+        
+        // Save game state
+        this.saveGame();
+    }
+
+    update(): void {
+        // Process daily updates
+        this.updatePrices();
+        this.processDailyExpenses();
+        
+        // Process monthly updates on the first day of the month
+        if (this.player.currentDay === 1) {
+            this.processMonthlyIncome();
+            this.processSavingsInterest();
+            this.processLoans();
+            
+            // Check for news events
+            this.checkForNews();
+            
+            // Process random events (only personal events, not historical ones)
+            this.processRandomEvents();
+        }
+        
+        // Advance time
+        this.advanceTime();
+        
+        // Save game
+        this.saveGame();
+    }
+
+    updatePrices(): void {
+        // Update stock prices
+        for (const symbol in this.player.stocks) {
+            // Get current price for this stock
+            this.player.getCurrentStockPrice(symbol);
+        }
+        
+        // Update property values
+        for (const property of this.player.properties) {
+            property.value = this.player.getCurrentPropertyValue(property);
+        }
+    }
+
+    advanceTime(): void {
+        // Advance to the next day
+        this.player.currentDay++;
+        
+        // Check if we need to advance to the next month
+        const daysInMonth = this.player.getDaysInMonth(this.player.currentMonth, this.player.currentYear);
+        if (this.player.currentDay > daysInMonth) {
+            this.player.currentDay = 1;
+            this.player.currentMonth++;
+            
+            // Check if we need to advance to the next year
+            if (this.player.currentMonth > 11) {
+                this.player.currentMonth = 0;
+                this.player.currentYear++;
+                this.player.age++;
+                
+                // Check if the player has reached the end age
+                if (this.player.age >= GAME_DATA.config.endAge) {
+                    this.setGameState(GameState.ENDED);
+                    return;
+                }
+            }
+            
+            // Process capital gains tax at the start of the new tax year (April)
+            if (this.player.currentMonth === 3 && this.player.currentDay === 1) {
+                this.processCapitalGainsTax();
+            }
+        }
+    }
+
+    processDailyExpenses(): void {
+        // Calculate daily expenses (monthly expenses divided by days in month)
+        const daysInMonth = this.player.getDaysInMonth(this.player.currentMonth, this.player.currentYear);
+        const dailyExpenses = this.player.getTotalExpenses() / daysInMonth;
+        
+        // Deduct daily expenses from cash
+        this.player.cash -= dailyExpenses;
+        
+        // Check if player is bankrupt
+        if (this.player.cash < -10000) {
+            this.addNotification("You're deeply in debt! Consider taking out a loan or selling assets.");
+        }
+    }
+
+    processMonthlyIncome(): void {
+        // Skip if player has job loss months remaining
+        if (this.player.jobLossMonths > 0) {
+            this.player.jobLossMonths--;
+            this.addNotification(`You're still unemployed. ${this.player.jobLossMonths} months remaining until you find a new job.`);
+            return;
+        }
+        
+        // Calculate monthly income based on current year
+        this.player.monthlyIncome = this.player.calculateMonthlyIncome();
+        
+        // Add income to cash
+        this.player.cash += this.player.monthlyIncome;
+        
+        // Add notification
+        this.addNotification(`You received your monthly income of £${this.player.monthlyIncome.toFixed(2)}.`);
+    }
+
+    processSavingsInterest(): void {
+        // Skip if no savings
+        if (this.player.savings <= 0) {
+            return;
+        }
+        
+        // Get current interest rate
+        const baseRate = GAME_DATA.interestRates[this.player.currentYear] || 0;
+        const savingsRate = baseRate * 0.7; // Savings accounts typically offer less than base rate
+        
+        // Calculate monthly interest
+        const monthlyRate = savingsRate / 100 / 12;
+        const interest = this.player.savings * monthlyRate;
+        
+        // Add interest to savings
+        this.player.savings += interest;
+        
+        // Add notification
+        this.addNotification(`You earned £${interest.toFixed(2)} in savings interest.`);
+    }
+
+    processLoans(): void {
+        // Process each loan
+        for (let i = this.player.loans.length - 1; i >= 0; i--) {
+            const loan = this.player.loans[i];
+            
+            // Deduct monthly payment from cash
+            this.player.cash -= loan.monthlyPayment;
+            
+            // Calculate interest and principal portions
+            const monthlyInterestRate = loan.interestRate / 100 / 12;
+            const interestPortion = loan.remainingAmount * monthlyInterestRate;
+            const principalPortion = loan.monthlyPayment - interestPortion;
+            
+            // Update remaining amount
+            loan.remainingAmount -= principalPortion;
+            
+            // Check if loan is paid off
+            if (loan.remainingAmount <= 0) {
+                this.addNotification(`You've paid off your ${loan.type} loan!`);
+                this.player.loans.splice(i, 1);
+            }
+        }
+    }
+
+    processRandomEvents(): void {
+        // Process random events
+        for (const event of GAME_DATA.events) {
+            // Check probability
+            if (Math.random() < event.probability) {
+                // Execute event effect
+                const effect = event.effect(this.player);
+                
+                // Skip if no effect (e.g., conditions not met)
+                if (!effect) {
+                    continue;
+                }
+                
+                // Apply effect - use type assertion to handle the union type
+                const eventEffect = effect as RandomEventEffect;
+                
+                if ('cashChange' in eventEffect && eventEffect.cashChange) {
+                    this.player.cash += eventEffect.cashChange;
+                }
+                
+                if ('jobLoss' in eventEffect && eventEffect.jobLoss) {
+                    this.player.jobLossMonths = eventEffect.jobLoss;
+                }
+                
+                if ('marketCrash' in eventEffect && eventEffect.marketCrash) {
+                    this.processMarketCrash();
+                }
+                
+                if ('divorce' in eventEffect && eventEffect.divorce) {
+                    this.processDivorce();
+                }
+                
+                if ('childExpense' in eventEffect && eventEffect.childExpense) {
+                    this.player.children++;
+                    this.player.monthlyExpenses.other += eventEffect.childExpense;
+                }
+                
+                // Add notification
+                this.addNotification(eventEffect.message);
+                
+                // Add to event history
+                this.eventHistory.push({
+                    date: `${GAME_DATA.config.monthNames[this.player.currentMonth]} ${this.player.currentYear}`,
+                    event: event.name,
+                    message: eventEffect.message
+                });
+                
+                // Only process one random event per month
+                break;
+            }
+        }
+    }
+
+    processMarketCrash(): void {
+        // Reduce stock prices by 20-40%
+        for (const symbol in this.player.stocks) {
+            const currentPrice = this.player.getCurrentStockPrice(symbol);
+            const crashFactor = 0.6 + Math.random() * 0.2; // 60-80% of original value
+            this.player.currentMonthPrices[symbol] = currentPrice * crashFactor;
+        }
+    }
+
+    processDivorce(): void {
+        // Player loses half of all assets
+        this.player.cash /= 2;
+        this.player.savings /= 2;
+        
+        // Set married status to false
+        this.player.married = false;
+        
+        // Update rent (will be higher now as single)
+        this.player.updateRent();
+        
+        // Add event to history
+        this.eventHistory.push({
+            date: `${GAME_DATA.config.monthNames[this.player.currentMonth]} ${this.player.currentYear}`,
+            event: 'Divorce',
+            message: 'Your marriage has ended in divorce. Half of your assets have been divided.'
+        });
+    }
+
+    processCapitalGainsTax(): void {
+        const taxDue = this.player.calculateCapitalGainsTax();
+        
+        if (taxDue > 0) {
+            // Deduct tax from cash
+            this.player.cash -= taxDue;
+            
+            // Record tax paid
+            this.player.capitalGains.taxPaid += taxDue;
+            
+            // Add notification
+            this.addNotification(`Paid £${taxDue.toFixed(2)} in capital gains tax for the tax year.`);
+            
+            // Reset for new tax year
+            this.player.capitalGains.currentTaxYear = 0;
+            this.player.capitalGains.allowanceUsed = 0;
+        } else if (this.player.capitalGains.currentTaxYear > 0) {
+            // No tax due but there were gains
+            this.addNotification(`No capital gains tax due as your gains of £${this.player.capitalGains.currentTaxYear.toFixed(2)} are within the annual allowance.`);
+            
+            // Reset for new tax year
+            this.player.capitalGains.currentTaxYear = 0;
+            this.player.capitalGains.allowanceUsed = 0;
+        }
+    }
+
+    addNotification(message: string): void {
+        // Add notification to the list
+        this.notifications.unshift(message);
+        
+        // Keep only the latest 10 notifications
+        if (this.notifications.length > 10) {
+            this.notifications.pop();
+        }
+    }
+
+    checkForNews(): NewsEvent | null {
+        const currentYear = this.player.currentYear;
+        const currentMonth = this.player.currentMonth;
+        
+        // Check for news events
+        for (const newsEvent of NEWS_EVENTS) {
+            if (newsEvent.date.year === currentYear && newsEvent.date.month === currentMonth) {
+                // Check if this news has already been shown
+                const newsId = `${newsEvent.date.year}-${newsEvent.date.month}-${newsEvent.title}`;
+                if (!this.shownNews.includes(newsId)) {
+                    // Add to shown news
+                    this.shownNews.push(newsId);
+                    
+                    // Add to game notifications
+                    this.addNotification(`NEWS: ${newsEvent.title}`);
+                    
+                    // Add to event history
+                    this.eventHistory.push({
+                        date: `${GAME_DATA.config.monthNames[currentMonth]} ${currentYear}`,
+                        event: 'News',
+                        message: newsEvent.title
+                    });
+                    
+                    // Return the news event to be displayed
+                    return newsEvent;
+                }
+            }
+        }
+        
+        return null;
+    }
+
+    saveGame(): void {
+        console.log("Saving game...");
+        
+        // Ensure player data is up to date
+        this.player.updateRent();
+        this.player.adjustExpensesForInflation();
+        
+        // Save game state to localStorage
+        const gameData = {
+            player: {
+                // Core properties
+                age: this.player.age,
+                cash: this.player.cash,
+                savings: this.player.savings,
+                currentDay: this.player.currentDay,
+                currentMonth: this.player.currentMonth,
+                currentYear: this.player.currentYear,
+                monthlyIncome: this.player.monthlyIncome,
+                married: this.player.married,
+                children: this.player.children,
+                jobLossMonths: this.player.jobLossMonths,
+                location: this.player.location,
+                
+                // Complex properties
+                stocks: this.player.stocks,
+                properties: this.player.properties,
+                loans: this.player.loans,
+                car: this.player.car,
+                insurance: this.player.insurance,
+                capitalGains: this.player.capitalGains,
+                baseExpenses: this.player.baseExpenses,
+                monthlyExpenses: this.player.monthlyExpenses,
+                housing: this.player.housing,
+                monthlyHousingPayment: this.player.monthlyHousingPayment,
+                
+                // Price history
+                lastMonthPrices: this.player.lastMonthPrices,
+                currentMonthPrices: this.player.currentMonthPrices,
+                dailyVolatility: this.player.dailyVolatility
+            },
+            gameState: this.gameState,
+            previousGameState: this.previousGameState,
+            notifications: this.notifications,
+            eventHistory: this.eventHistory,
+            shownNews: this.shownNews,
+            saveDate: new Date().toLocaleString()
+        };
+        
+        try {
+            localStorage.setItem('investmentGameSave', JSON.stringify(gameData));
+            console.log("Game saved successfully:", {
+                day: this.player.currentDay,
+                month: this.player.currentMonth,
+                year: this.player.currentYear,
+                cash: this.player.cash
+            });
+        } catch (error) {
+            console.error("Error saving game:", error);
+        }
+        
+        // Update saved games list
+        this.savedGames = this.getSavedGames();
+    }
+
+    loadGame(): boolean {
+        // Load game state from localStorage
+        console.log("Loading autosave game...");
+        return this.loadGameByName('Autosave');
+    }
+
+    endGame(): void {
+        // Calculate final net worth
+        const finalNetWorth = this.player.getNetWorth();
+        
+        // Add notification
+        this.addNotification(`Game Over! You've reached age ${this.player.age} with a final net worth of £${finalNetWorth.toFixed(2)}.`);
+        
+        // Set game state to ended
+        this.gameState = GameState.ENDED;
+        
+        // Save final game state
+        this.saveGame();
+    }
+
+    restartGame(): void {
+        // Create a new player
+        this.player = new Player();
+        
+        // Reset game state
+        this.gameState = GameState.PAUSED;
+        this.previousGameState = null;
+        this.notifications = [];
+        this.eventHistory = [];
+        this.shownNews = [];
+        
+        // Save new game state
+        this.saveGame();
+    }
+
+    // Stock methods
+    buyStock(symbol: string, quantity: number): boolean {
+        // Get current price
+        const currentPrice = this.player.getCurrentStockPrice(symbol);
+        
+        // Calculate total cost
+        const totalCost = currentPrice * quantity;
+        
+        // Check if player has enough cash
+        if (this.player.cash < totalCost) {
+            this.addNotification(`You don't have enough cash to buy ${quantity} shares of ${symbol}.`);
+            return false;
+        }
+        
+        // Update player's stocks
+        if (!this.player.stocks[symbol]) {
+            this.player.stocks[symbol] = {
+                shares: quantity,
+                avgBuyPrice: currentPrice
+            };
+        } else {
+            // Calculate new average buy price
+            const currentShares = this.player.stocks[symbol].shares;
+            const currentAvgPrice = this.player.stocks[symbol].avgBuyPrice;
+            const newTotalShares = currentShares + quantity;
+            const newAvgPrice = (currentShares * currentAvgPrice + quantity * currentPrice) / newTotalShares;
+            
+            // Update stock data
+            this.player.stocks[symbol].shares = newTotalShares;
+            this.player.stocks[symbol].avgBuyPrice = newAvgPrice;
+        }
+        
+        // Deduct cost from cash
+        this.player.cash -= totalCost;
+        
+        // Add notification
+        this.addNotification(`Bought ${quantity} shares of ${symbol} at £${currentPrice.toFixed(2)} per share.`);
+        
+        // Add to event history
+        this.eventHistory.push({
+            date: `${GAME_DATA.config.monthNames[this.player.currentMonth]} ${this.player.currentYear}`,
+            event: 'Stock Purchase',
+            message: `Bought ${quantity} shares of ${symbol} at £${currentPrice.toFixed(2)} per share.`
+        });
+        
+        return true;
+    }
+
+    sellStock(symbol: string, quantity: number): boolean {
+        // Check if player owns the stock
+        if (!this.player.stocks[symbol] || this.player.stocks[symbol].shares < quantity) {
+            this.addNotification(`You don't own ${quantity} shares of ${symbol}.`);
+            return false;
+        }
+        
+        // Get current price
+        const currentPrice = this.player.getCurrentStockPrice(symbol);
+        
+        // Calculate total sale value
+        const totalValue = currentPrice * quantity;
+        
+        // Calculate capital gain/loss
+        const originalCost = this.player.stocks[symbol].avgBuyPrice * quantity;
+        const capitalGain = totalValue - originalCost;
+        
+        // Add capital gain to tax tracking
+        if (capitalGain > 0) {
+            this.player.capitalGains.currentTaxYear += capitalGain;
+        }
+        
+        // Update player's stocks
+        this.player.stocks[symbol].shares -= quantity;
+        
+        // Remove stock if no shares left
+        if (this.player.stocks[symbol].shares === 0) {
+            delete this.player.stocks[symbol];
+        }
+        
+        // Add value to cash
+        this.player.cash += totalValue;
+        
+        // Add notification
+        this.addNotification(`Sold ${quantity} shares of ${symbol} at £${currentPrice.toFixed(2)} per share.`);
+        
+        // Add to event history
+        this.eventHistory.push({
+            date: `${GAME_DATA.config.monthNames[this.player.currentMonth]} ${this.player.currentYear}`,
+            event: 'Stock Sale',
+            message: `Sold ${quantity} shares of ${symbol} at £${currentPrice.toFixed(2)} per share.`
+        });
+        
+        return true;
+    }
+
+    // Property methods
+    buyProperty(property: any): boolean {
+        // Check if player has enough cash
+        if (this.player.cash < property.purchasePrice) {
+            this.addNotification(`You don't have enough cash to buy this property.`);
+            return false;
+        }
+        
+        // Add property to player's properties
+        this.player.properties.push(property);
+        
+        // Deduct cost from cash
+        this.player.cash -= property.purchasePrice;
+        
+        // Update rent if this is a primary residence
+        if (!property.isRental) {
+            this.player.updateRent();
+        }
+        
+        // Add notification
+        this.addNotification(`Bought a ${property.size}sqm property in ${property.location} for £${property.purchasePrice.toFixed(2)}.`);
+        
+        // Add to event history
+        this.eventHistory.push({
+            date: `${GAME_DATA.config.monthNames[this.player.currentMonth]} ${this.player.currentYear}`,
+            event: 'Property Purchase',
+            message: `Bought a ${property.size}sqm property in ${property.location} for £${property.purchasePrice.toFixed(2)}.`
+        });
+        
+        return true;
+    }
+
+    sellProperty(propertyIndex: number): boolean {
+        // Check if property exists
+        if (propertyIndex < 0 || propertyIndex >= this.player.properties.length) {
+            this.addNotification(`Invalid property selection.`);
+            return false;
+        }
+        
+        const property = this.player.properties[propertyIndex];
+        const currentValue = this.player.getCurrentPropertyValue(property);
+        
+        // Calculate capital gain/loss
+        const capitalGain = currentValue - property.purchasePrice;
+        
+        // Add capital gain to tax tracking
+        if (capitalGain > 0) {
+            this.player.capitalGains.currentTaxYear += capitalGain;
+        }
+        
+        // Add value to cash
+        this.player.cash += currentValue;
+        
+        // Remove property
+        this.player.properties.splice(propertyIndex, 1);
+        
+        // Update rent if this was a primary residence
+        if (!property.isRental) {
+            this.player.updateRent();
+        }
+        
+        // Add notification
+        this.addNotification(`Sold your property in ${property.location} for £${currentValue.toFixed(2)}.`);
+        
+        // Add to event history
+        this.eventHistory.push({
+            date: `${GAME_DATA.config.monthNames[this.player.currentMonth]} ${this.player.currentYear}`,
+            event: 'Property Sale',
+            message: `Sold your property in ${property.location} for £${currentValue.toFixed(2)}.`
+        });
+        
+        return true;
+    }
+
+    // Savings methods
+    deposit(amount: number): boolean {
+        // Check if player has enough cash
+        if (this.player.cash < amount) {
+            this.addNotification(`You don't have enough cash to deposit £${amount.toFixed(2)}.`);
+            return false;
+        }
+        
+        // Transfer from cash to savings
+        this.player.cash -= amount;
+        this.player.savings += amount;
+        
+        // Add notification
+        this.addNotification(`Deposited £${amount.toFixed(2)} into your savings account.`);
+        
+        return true;
+    }
+
+    withdraw(amount: number): boolean {
+        // Check if player has enough savings
+        if (this.player.savings < amount) {
+            this.addNotification(`You don't have enough savings to withdraw £${amount.toFixed(2)}.`);
+            return false;
+        }
+        
+        // Transfer from savings to cash
+        this.player.savings -= amount;
+        this.player.cash += amount;
+        
+        // Add notification
+        this.addNotification(`Withdrew £${amount.toFixed(2)} from your savings account.`);
+        
+        return true;
+    }
+
+    // Marriage method
+    processMarriage(): boolean {
+        // Check if already married
+        if (this.player.married) {
+            this.addNotification(`You're already married!`);
+            return false;
+        }
+        
+        // Set married status
+        this.player.married = true;
+        
+        // Adjust expenses
+        this.player.updateRent();
+        
+        // Add cash bonus (representing spouse's assets)
+        const spouseAssets = this.player.monthlyIncome * 12;
+        this.player.cash += spouseAssets;
+        
+        // Add notification
+        this.addNotification(`Congratulations on your marriage! Your spouse brings £${spouseAssets.toFixed(2)} in assets.`);
+        
+        // Add to event history
+        this.eventHistory.push({
+            date: `${GAME_DATA.config.monthNames[this.player.currentMonth]} ${this.player.currentYear}`,
+            event: 'Marriage',
+            message: `You got married!`
+        });
+        
+        return true;
+    }
+
+    // Car methods
+    buyCar(car: any): boolean {
+        // Check if player has enough cash
+        if (this.player.cash < car.purchasePrice) {
+            this.addNotification(`You don't have enough cash to buy this car.`);
+            return false;
+        }
+        
+        // Sell existing car if any
+        if (this.player.car) {
+            this.sellCar();
+        }
+        
+        // Set new car
+        this.player.car = car;
+        
+        // Deduct cost from cash
+        this.player.cash -= car.purchasePrice;
+        
+        // Add notification
+        this.addNotification(`Bought a ${car.make} ${car.model} for £${car.purchasePrice.toFixed(2)}.`);
+        
+        // Add to event history
+        this.eventHistory.push({
+            date: `${GAME_DATA.config.monthNames[this.player.currentMonth]} ${this.player.currentYear}`,
+            event: 'Car Purchase',
+            message: `Bought a ${car.make} ${car.model} for £${car.purchasePrice.toFixed(2)}.`
+        });
+        
+        return true;
+    }
+
+    sellCar(): boolean {
+        // Check if player has a car
+        if (!this.player.car) {
+            this.addNotification(`You don't have a car to sell.`);
+            return false;
+        }
+        
+        // Calculate current value (cars depreciate)
+        const currentValue = this.player.car.value;
+        
+        // Add value to cash
+        this.player.cash += currentValue;
+        
+        // Add notification
+        this.addNotification(`Sold your ${this.player.car.make} ${this.player.car.model} for £${currentValue.toFixed(2)}.`);
+        
+        // Remove car
+        this.player.car = null;
+        
+        // Add to event history
+        this.eventHistory.push({
+            date: `${GAME_DATA.config.monthNames[this.player.currentMonth]} ${this.player.currentYear}`,
+            event: 'Car Sale',
+            message: `Sold your car for £${currentValue.toFixed(2)}.`
+        });
+        
+        return true;
+    }
+
+    // Loan methods
+    takeLoan(loan: any): boolean {
+        // Add loan to player's loans
+        this.player.loans.push(loan);
+        
+        // Add loan amount to cash
+        this.player.cash += loan.amount;
+        
+        // Add notification
+        this.addNotification(`Took out a ${loan.type} loan for £${loan.amount.toFixed(2)}.`);
+        
+        // Add to event history
+        this.eventHistory.push({
+            date: `${GAME_DATA.config.monthNames[this.player.currentMonth]} ${this.player.currentYear}`,
+            event: 'Loan',
+            message: `Took out a ${loan.type} loan for £${loan.amount.toFixed(2)}.`
+        });
+        
+        return true;
+    }
+
+    // Insurance methods
+    buyInsurance(type: keyof typeof this.player.insurance, cost: number): boolean {
+        // Check if player has enough cash
+        if (this.player.cash < cost) {
+            this.addNotification(`You don't have enough cash to buy ${type} insurance.`);
+            return false;
+        }
+        
+        // Set insurance status
+        this.player.insurance[type] = true;
+        
+        // Deduct cost from cash
+        this.player.cash -= cost;
+        
+        // Add notification
+        this.addNotification(`Purchased ${type} insurance for £${cost.toFixed(2)}.`);
+        
+        return true;
+    }
+
+    cancelInsurance(type: keyof typeof this.player.insurance): void {
+        // Set insurance status
+        this.player.insurance[type] = false;
+        
+        // Add notification
+        this.addNotification(`Cancelled your ${type} insurance.`);
+    }
+
+    // Sound settings
+    toggleSound(): void {
+        this.soundEnabled = !this.soundEnabled;
+        localStorage.setItem('investmentGameSoundEnabled', JSON.stringify(this.soundEnabled));
+    }
+
+    // Get sound setting from localStorage
+    loadSoundSetting(): void {
+        const soundSetting = localStorage.getItem('investmentGameSoundEnabled');
+        if (soundSetting !== null) {
+            this.soundEnabled = JSON.parse(soundSetting);
+        }
+    }
+
+    // Play sound if enabled
+    playSound(soundType: string): void {
+        if (!this.soundEnabled) return;
+        
+        // Sound implementation would go here
+        console.log(`Playing sound: ${soundType}`);
+        // Example: new Audio(`/sounds/${soundType}.mp3`).play();
+    }
+
+    // Saved games management
+    getSavedGames(): { name: string, date: string, data: string }[] {
+        const savedGames: { name: string, date: string, data: string }[] = [];
+        
+        // Get default autosave
+        const autosave = localStorage.getItem('investmentGameSave');
+        if (autosave) {
+            try {
+                const gameData = JSON.parse(autosave);
+                const saveDate = gameData.saveDate || new Date().toLocaleString();
+                
+                savedGames.push({
+                    name: 'Autosave',
+                    date: saveDate,
+                    data: autosave
+                });
+            } catch (error) {
+                console.error('Error parsing autosave data:', error);
+                savedGames.push({
+                    name: 'Autosave',
+                    date: new Date().toLocaleString(),
+                    data: autosave
+                });
+            }
+        }
+        
+        // Get named saves
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith('investmentGameSave_')) {
+                const name = key.replace('investmentGameSave_', '');
+                const saveData = localStorage.getItem(key);
+                if (saveData) {
+                    try {
+                        const gameData = JSON.parse(saveData);
+                        const saveDate = gameData.saveDate || new Date().toLocaleString();
+                        
+                        savedGames.push({
+                            name: name,
+                            date: saveDate,
+                            data: saveData
+                        });
+                    } catch (error) {
+                        console.error(`Error parsing save data for ${name}:`, error);
+                    }
+                }
+            }
+        }
+        
+        return savedGames;
+    }
+
+    // Save game with name
+    saveGameAs(name: string): void {
+        console.log(`Saving game as: ${name}`);
+        
+        // Ensure player data is up to date
+        this.player.updateRent();
+        this.player.adjustExpensesForInflation();
+        
+        // Add save date to game data
+        const gameData = {
+            player: {
+                // Core properties
+                age: this.player.age,
+                cash: this.player.cash,
+                savings: this.player.savings,
+                currentDay: this.player.currentDay,
+                currentMonth: this.player.currentMonth,
+                currentYear: this.player.currentYear,
+                monthlyIncome: this.player.monthlyIncome,
+                married: this.player.married,
+                children: this.player.children,
+                jobLossMonths: this.player.jobLossMonths,
+                location: this.player.location,
+                
+                // Complex properties
+                stocks: this.player.stocks,
+                properties: this.player.properties,
+                loans: this.player.loans,
+                car: this.player.car,
+                insurance: this.player.insurance,
+                capitalGains: this.player.capitalGains,
+                baseExpenses: this.player.baseExpenses,
+                monthlyExpenses: this.player.monthlyExpenses,
+                housing: this.player.housing,
+                monthlyHousingPayment: this.player.monthlyHousingPayment,
+                
+                // Price history
+                lastMonthPrices: this.player.lastMonthPrices,
+                currentMonthPrices: this.player.currentMonthPrices,
+                dailyVolatility: this.player.dailyVolatility
+            },
+            gameState: this.gameState,
+            previousGameState: this.previousGameState,
+            notifications: this.notifications,
+            eventHistory: this.eventHistory,
+            shownNews: this.shownNews,
+            saveDate: new Date().toLocaleString()
+        };
+        
+        // Save to localStorage with name
+        try {
+            localStorage.setItem(`investmentGameSave_${name}`, JSON.stringify(gameData));
+            console.log(`Game saved successfully as ${name}:`, {
+                day: this.player.currentDay,
+                month: this.player.currentMonth,
+                year: this.player.currentYear,
+                cash: this.player.cash
+            });
+        } catch (error) {
+            console.error(`Error saving game as ${name}:`, error);
+        }
+        
+        // Update saved games list
+        this.savedGames = this.getSavedGames();
+    }
+
+    // Load specific saved game
+    loadGameByName(name: string): boolean {
+        console.log(`Loading game: ${name}`);
+        let saveData;
+        
+        if (name === 'Autosave') {
+            saveData = localStorage.getItem('investmentGameSave');
+        } else {
+            saveData = localStorage.getItem(`investmentGameSave_${name}`);
+        }
+        
+        if (!saveData) {
+            console.error(`No save data found for ${name}`);
+            return false;
+        }
+        
+        try {
+            console.log("Parsing save data...");
+            const gameData = JSON.parse(saveData);
+            console.log("Save data parsed:", { 
+                gameState: gameData.gameState,
+                playerData: gameData.player ? "exists" : "missing",
+                cash: gameData.player?.cash
+            });
+            
+            // Create a new player instance to avoid reference issues
+            this.player = new Player();
+            
+            // Restore player data with proper type handling
+            if (gameData.player) {
+                console.log("Restoring player data...");
+                // Handle primitive properties
+                this.player.age = gameData.player.age ?? this.player.age;
+                this.player.cash = gameData.player.cash ?? this.player.cash;
+                this.player.savings = gameData.player.savings ?? this.player.savings;
+                this.player.currentDay = gameData.player.currentDay ?? this.player.currentDay;
+                this.player.currentMonth = gameData.player.currentMonth ?? this.player.currentMonth;
+                this.player.currentYear = gameData.player.currentYear ?? this.player.currentYear;
+                this.player.monthlyIncome = gameData.player.monthlyIncome ?? this.player.monthlyIncome;
+                this.player.married = gameData.player.married ?? this.player.married;
+                this.player.children = gameData.player.children ?? this.player.children;
+                this.player.jobLossMonths = gameData.player.jobLossMonths ?? 0;
+                this.player.location = gameData.player.location ?? this.player.location;
+                
+                // Handle complex properties
+                if (gameData.player.monthlyExpenses) {
+                    this.player.monthlyExpenses = {...this.player.monthlyExpenses, ...gameData.player.monthlyExpenses};
+                }
+                
+                if (gameData.player.stocks) {
+                    this.player.stocks = {...gameData.player.stocks};
+                }
+                
+                if (gameData.player.properties) {
+                    this.player.properties = [...gameData.player.properties];
+                }
+                
+                if (gameData.player.loans) {
+                    this.player.loans = [...gameData.player.loans];
+                }
+                
+                if (gameData.player.car) {
+                    this.player.car = {...gameData.player.car};
+                }
+                
+                if (gameData.player.insurance) {
+                    this.player.insurance = {...this.player.insurance, ...gameData.player.insurance};
+                }
+                
+                if (gameData.player.capitalGains) {
+                    this.player.capitalGains = {...this.player.capitalGains, ...gameData.player.capitalGains};
+                }
+                
+                if (gameData.player.baseExpenses) {
+                    this.player.baseExpenses = {...this.player.baseExpenses, ...gameData.player.baseExpenses};
+                }
+                
+                if (gameData.player.housing) {
+                    this.player.housing = gameData.player.housing;
+                }
+
+                if (gameData.player.monthlyHousingPayment !== undefined) {
+                    this.player.monthlyHousingPayment = gameData.player.monthlyHousingPayment;
+                }
+                
+                // Restore price history if available
+                if (gameData.player.lastMonthPrices) {
+                    this.player.lastMonthPrices = {...gameData.player.lastMonthPrices};
+                }
+                
+                if (gameData.player.currentMonthPrices) {
+                    this.player.currentMonthPrices = {...gameData.player.currentMonthPrices};
+                }
+                
+                // Restore volatility
+                if (gameData.player.dailyVolatility) {
+                    this.player.dailyVolatility = gameData.player.dailyVolatility;
+                }
+            }
+            
+            // Restore game state
+            this.gameState = gameData.gameState ?? GameState.PAUSED;
+            
+            // Restore previous game state if available
+            if (gameData.previousGameState) {
+                this.previousGameState = gameData.previousGameState;
+            }
+            
+            this.notifications = gameData.notifications ?? [];
+            this.eventHistory = gameData.eventHistory ?? [];
+            this.shownNews = gameData.shownNews ?? [];
+            
+            // Initialize stock prices based on the loaded date
+            console.log("Initializing stock prices...");
+            this.player.initializeStockPrices();
+            
+            // Update rent based on the loaded player state
+            console.log("Updating rent...");
+            this.player.updateRent();
+            
+            // Adjust expenses for inflation based on the loaded year
+            console.log("Adjusting expenses for inflation...");
+            this.player.adjustExpensesForInflation();
+            
+            // Update saved games list
+            this.savedGames = this.getSavedGames();
+            
+            console.log("Game loaded successfully:", {
+                day: this.player.currentDay,
+                month: this.player.currentMonth,
+                year: this.player.currentYear,
+                cash: this.player.cash,
+                gameState: this.gameState
+            });
+            return true;
+        } catch (error) {
+            console.error(`Error loading saved game ${name}:`, error);
+            return false;
+        }
+    }
+
+    // Delete saved game
+    deleteSavedGame(name: string): void {
+        if (name === 'Autosave') {
+            localStorage.removeItem('investmentGameSave');
+        } else {
+            localStorage.removeItem(`investmentGameSave_${name}`);
+        }
+        
+        // Update saved games list
+        this.savedGames = this.getSavedGames();
+    }
+
+    // Handle page unload/refresh
+    handlePageUnload(): void {
+        console.log("Handling page unload, saving game state...");
+        
+        // Ensure player data is up to date
+        this.player.updateRent();
+        this.player.adjustExpensesForInflation();
+        
+        // Save the current game state before unload
+        const gameData = {
+            player: {
+                // Core properties
+                age: this.player.age,
+                cash: this.player.cash,
+                savings: this.player.savings,
+                currentDay: this.player.currentDay,
+                currentMonth: this.player.currentMonth,
+                currentYear: this.player.currentYear,
+                monthlyIncome: this.player.monthlyIncome,
+                married: this.player.married,
+                children: this.player.children,
+                jobLossMonths: this.player.jobLossMonths,
+                location: this.player.location,
+                
+                // Complex properties
+                stocks: this.player.stocks,
+                properties: this.player.properties,
+                loans: this.player.loans,
+                car: this.player.car,
+                insurance: this.player.insurance,
+                capitalGains: this.player.capitalGains,
+                baseExpenses: this.player.baseExpenses,
+                monthlyExpenses: this.player.monthlyExpenses,
+                housing: this.player.housing,
+                monthlyHousingPayment: this.player.monthlyHousingPayment,
+                
+                // Price history
+                lastMonthPrices: this.player.lastMonthPrices,
+                currentMonthPrices: this.player.currentMonthPrices,
+                dailyVolatility: this.player.dailyVolatility
+            },
+            gameState: this.gameState, // Store the actual current state
+            previousGameState: this.gameState !== GameState.PAUSED ? this.gameState : this.previousGameState, // Remember if we were running
+            notifications: this.notifications,
+            eventHistory: this.eventHistory,
+            shownNews: this.shownNews,
+            saveDate: new Date().toLocaleString()
+        };
+        
+        // Save to localStorage
+        try {
+            localStorage.setItem('investmentGameSave', JSON.stringify(gameData));
+            console.log("Game saved successfully on unload:", {
+                day: this.player.currentDay,
+                month: this.player.currentMonth,
+                year: this.player.currentYear,
+                cash: this.player.cash
+            });
+        } catch (error) {
+            console.error("Error saving game on unload:", error);
+        }
+        
+        // Clear any running intervals
+        if (this.gameInterval) {
+            clearInterval(this.gameInterval);
+            this.gameInterval = null;
+        }
+    }
+
+    private generateInitialHousingMarket(): HousingMarket {
+        // Get current property prices for each region
+        const currentYear = this.player.currentYear;
+        
+        // Only use regions that have price data
+        const availableRegions = Object.keys(GAME_DATA.housePrice);
+        
+        const houses: Housing[] = availableRegions.map((region, index) => {
+            // Get price per square meter for the region
+            const pricePerSqm = GAME_DATA.housePrice[region][currentYear] || 
+                               GAME_DATA.housePrice[region][Number(Object.keys(GAME_DATA.housePrice[region]).slice(-1)[0])];
+            
+            // Define different house sizes and types for variety
+            const houseTypes = [
+                { name: 'Modern Apartment', size: 65, condition: 9 }, // ~700 sq ft
+                { name: 'Family Townhouse', size: 120, condition: 8 }, // ~1300 sq ft
+                { name: 'Detached House', size: 185, condition: 8 }, // ~2000 sq ft
+            ];
+            
+            const house = houseTypes[index % houseTypes.length];
+            const totalPrice = Math.round(pricePerSqm * house.size);
+            
+            return {
+                id: `house_${region}_${index}`,
+                type: 'OWNED',
+                name: `${house.name} in ${region}`,
+                location: region,
+                price: totalPrice,
+                monthlyPayment: 0,
+                size: house.size,
+                condition: house.condition,
+                appreciationRate: 0.03,
+                propertyTax: Math.round(totalPrice * 0.01), // 1% property tax
+                mortgageRate: GAME_DATA.interestRates[currentYear] / 100 + 0.02, // Base rate + 2% margin
+                mortgageTermYears: 30
+            };
+        });
+
+        const rentals: Housing[] = availableRegions.map((region, index) => {
+            // Get monthly rent for the region
+            const baseRent = GAME_DATA.rentPrice[region][currentYear] || 
+                           GAME_DATA.rentPrice[region][Number(Object.keys(GAME_DATA.rentPrice[region]).slice(-1)[0])];
+            
+            // Define different rental property types
+            const rentalTypes = [
+                { name: 'Studio Apartment', size: 35, condition: 8, multiplier: 0.8 }, // ~375 sq ft
+                { name: 'One Bedroom Flat', size: 50, condition: 7, multiplier: 1.0 }, // ~540 sq ft
+                { name: 'Two Bedroom Apartment', size: 70, condition: 7, multiplier: 1.3 }, // ~750 sq ft
+            ];
+            
+            const rental = rentalTypes[index % rentalTypes.length];
+            
+            return {
+                id: `rental_${region}_${index}`,
+                type: 'RENT',
+                name: `${rental.name} in ${region}`,
+                location: region,
+                price: 0,
+                monthlyPayment: Math.round(baseRent * rental.multiplier),
+                size: rental.size,
+                condition: rental.condition,
+                appreciationRate: 0
+            };
+        });
+
+        // Filter out any regions that don't have price data
+        const availableHouses = houses.filter(house => house.price > 0);
+        const availableRentals = rentals.filter(rental => rental.monthlyPayment > 0);
+
+        return {
+            availableHouses,
+            rentals: availableRentals
+        };
+    }
+} 
