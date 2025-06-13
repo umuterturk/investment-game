@@ -19,7 +19,7 @@ export const GameContainer: React.FC = () => {
                     <ActionPanel />
                     
                     <div className="info-panel">
-                        <Notifications />
+                        <Notifications game={game} />
                         
                         <div className="monthly-summary">
                             <h3>Monthly Summary</h3>
@@ -27,8 +27,8 @@ export const GameContainer: React.FC = () => {
                                 <div className="summary-item">
                                     <span className="material-icons">work</span>
                                     <div>
-                                        <div className="label">Income</div>
-                                        <span>£{game.player.monthlyIncome.toFixed(0)}</span>
+                                        <div className="label">Net Income</div>
+                                        <span>£{game.player.calculateNetMonthlyIncome().toFixed(0)}</span>
                                     </div>
                                 </div>
                                 <div className="summary-item">

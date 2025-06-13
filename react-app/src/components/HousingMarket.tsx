@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Housing } from '../models/types';
 import { useGameContext } from '../context/GameContext';
 import { GAME_DATA } from '../data/gameData';
@@ -13,7 +13,16 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
   const [selectedHouse, setSelectedHouse] = useState<Housing | null>(null);
   const [showMortgageDetails, setShowMortgageDetails] = useState(false);
   const [downPaymentPercent, setDownPaymentPercent] = useState(20);
-  const [expandedSection, setExpandedSection] = useState<'houses' | 'rentals' | null>(null);
+  const [expandedSection, setExpandedSection] = useState<'houses' | 'rentals' | 'owned' | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [saleConfirmation, setSaleConfirmation] = useState<{property: Housing, index: number} | null>(null);
+
+  // Generate new listings when component mounts
+  useEffect(() => {
+    game.generateNewListings();
+    updateGame(game);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty dependency array means this runs once on mount
 
   const calculateMortgage = (house: Housing): number => {
     const principal = house.price * (1 - downPaymentPercent / 100);
@@ -32,7 +41,7 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
     return game.player.cash >= downPayment;
   };
 
-  const toggleSection = (section: 'houses' | 'rentals') => {
+  const toggleSection = (section: 'houses' | 'rentals' | 'owned') => {
     setExpandedSection(expandedSection === section ? null : section);
   };
 
@@ -53,15 +62,21 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
       type: 'OWNED',
       downPayment,
       monthlyPayment,
+      purchaseYear: game.player.currentYear,
     };
 
     game.player.cash -= downPayment;
-    game.player.housing = newHouse;
-    game.player.monthlyHousingPayment = monthlyPayment;
-    game.player.monthlyExpenses = {
-      ...game.player.monthlyExpenses,
-      rent: 0
-    };
+    game.player.properties.push(newHouse);
+
+    if (!game.player.housing) {
+      game.player.housing = newHouse;
+      game.player.monthlyHousingPayment = monthlyPayment;
+      game.player.monthlyExpenses = {
+        ...game.player.monthlyExpenses,
+        rent: 0
+      };
+      game.player.updateTransportCosts();
+    }
 
     game.addNotification(`Purchased ${house.name} for ${formatCurrency(house.price)} with ${downPaymentPercent}% down payment`);
     updateGame(game);
@@ -87,6 +102,7 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
       ...game.player.monthlyExpenses,
       rent: house.monthlyPayment
     };
+    game.player.updateTransportCosts();
 
     game.addNotification(`Rented ${house.name} for ${formatCurrency(house.monthlyPayment)} per month`);
     updateGame(game);
@@ -106,15 +122,403 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
     return Math.round(sqm * 10.764);
   };
 
+  const handleRefresh = () => {
+    setRefreshKey(prev => prev + 1);
+    setSelectedHouse(null);
+    game.generateNewListings();
+    updateGame(game);
+  };
+
+  const handleMoveIn = (property: Housing) => {
+    // Store the current primary residence if it exists
+    const oldPrimaryResidence = game.player.housing;
+    
+    // Set the selected property as the new primary residence
+    game.player.housing = property;
+    game.player.monthlyHousingPayment = property.monthlyPayment;
+    game.player.monthlyExpenses = {
+      ...game.player.monthlyExpenses,
+      rent: 0 // No rent when you own the property
+    };
+    game.player.updateTransportCosts();
+
+    // If we had a previous primary residence that we owned, it becomes an investment property
+    if (oldPrimaryResidence && oldPrimaryResidence.type === 'OWNED') {
+      // Make sure it's in the properties array if it's not already
+      if (!game.player.properties.includes(oldPrimaryResidence)) {
+        game.player.properties.push(oldPrimaryResidence);
+      }
+    }
+
+    game.addNotification(`Moved into ${property.name}`);
+    updateGame(game);
+  };
+
+  const handleRentOut = (property: Housing) => {
+    // Calculate rental income using the same logic as estimated rent
+    const baseRent = GAME_DATA.rentPrice[property.location][game.player.currentYear] || 
+                    GAME_DATA.rentPrice[property.location][Number(Object.keys(GAME_DATA.rentPrice[property.location]).slice(-1)[0])];
+    
+    // Adjust rent based on size (baseRent is for 50m²)
+    const sizeMultiplier = property.size / 50;
+    
+    // Adjust for condition (±10% per point difference from 7, which is the baseline condition)
+    const conditionAdjustment = 1 + ((property.condition - 7) * 0.1);
+    
+    // Apply a 5% discount to reflect real-world conditions (vacancy, negotiations, etc.)
+    const marketRent = Math.round(baseRent * sizeMultiplier * conditionAdjustment);
+    const actualRent = Math.round(marketRent * 0.95);
+
+    // Update the property
+    property.isRental = true;
+    property.rentalIncome = actualRent;
+
+    game.addNotification(`Started renting out ${property.name} for ${formatCurrency(actualRent)} per month`);
+    updateGame(game);
+  };
+
+  const handleStopRenting = (property: Housing) => {
+    property.isRental = false;
+    property.rentalIncome = 0;
+
+    game.addNotification(`Stopped renting out ${property.name}`);
+    updateGame(game);
+  };
+
+  const handleSaleConfirmation = (property: Housing, index: number) => {
+    setSaleConfirmation({ property, index });
+  };
+
+  const handleSaleCancel = () => {
+    setSaleConfirmation(null);
+  };
+
+  const calculateRemainingMortgage = (property: Housing): number => {
+    if (!property.purchaseYear) return 0;
+    
+    // Calculate original loan amount
+    const originalLoan = property.price * (1 - (property.downPayment || 0) / property.price);
+    
+    // Calculate number of payments made
+    const monthsSincePurchase = (game.player.currentYear - property.purchaseYear) * 12 + game.player.currentMonth;
+    const totalPayments = (property.mortgageTermYears || 30) * 12; // Default to 30 years if not specified
+    
+    // If loan is paid off
+    if (monthsSincePurchase >= totalPayments) return 0;
+    
+    // Calculate remaining balance using loan amortization formula
+    const monthlyRate = (property.mortgageRate || 0) / 12;
+    const remainingPayments = totalPayments - monthsSincePurchase;
+    
+    return originalLoan * 
+      (Math.pow(1 + monthlyRate, totalPayments) - Math.pow(1 + monthlyRate, monthsSincePurchase)) /
+      (Math.pow(1 + monthlyRate, totalPayments) - 1);
+  };
+
+  const calculateEarlyRepaymentCharge = (property: Housing): number => {
+    if (!property.purchaseYear) return 0;
+    
+    // Calculate years into mortgage
+    const yearsIntoMortgage = game.player.currentYear - property.purchaseYear;
+    
+    // If mortgage term is complete, no ERC
+    if (yearsIntoMortgage >= (property.mortgageTermYears || 30)) return 0;
+    
+    // ERC starts at 5% and decreases by 1% each year
+    const ercPercentage = Math.max(5 - yearsIntoMortgage, 0);
+    
+    // Calculate remaining mortgage
+    const remainingMortgage = calculateRemainingMortgage(property);
+    
+    return remainingMortgage * (ercPercentage / 100);
+  };
+
+  const handleSellProperty = (property: Housing, index: number) => {
+    console.log("Attempting to sell property:", property);
+    
+    // Don't allow selling the primary residence
+    if (property === game.player.housing) {
+      console.log("Cannot sell primary residence");
+      game.addNotification("You cannot sell your primary residence!");
+      return;
+    }
+
+    try {
+      // Calculate remaining mortgage debt using the new function
+      const remainingDebt = calculateRemainingMortgage(property);
+      console.log("Remaining debt:", remainingDebt);
+
+      // Calculate early repayment charge
+      const earlyRepaymentCharge = calculateEarlyRepaymentCharge(property);
+      console.log("Early repayment charge:", earlyRepaymentCharge);
+
+      // Calculate current market value based on location and appreciation
+      const basePrice = GAME_DATA.housePrice[property.location][game.player.currentYear] || 
+                       GAME_DATA.housePrice[property.location][Number(Object.keys(GAME_DATA.housePrice[property.location]).slice(-1)[0])];
+      
+      // Calculate years passed since purchase for appreciation
+      const yearsSincePurchase = property.purchaseYear 
+        ? game.player.currentYear - property.purchaseYear 
+        : 0; // If purchaseYear is undefined, assume it was purchased this year
+      const appreciationMultiplier = Math.pow(1 + property.appreciationRate, yearsSincePurchase);
+      
+      // Calculate current value considering:
+      // 1. Original price as base
+      // 2. Property appreciation over time
+      // 3. Market conditions (using current market price per sqm as a factor)
+      // 4. Property condition
+      const marketPriceRatio = property.purchaseYear
+        ? basePrice / (GAME_DATA.housePrice[property.location][property.purchaseYear] || basePrice)
+        : 1; // If purchaseYear is undefined, assume no market price change
+      const conditionAdjustment = 1 + ((property.condition - 7) * 0.1); // ±10% per point difference from 7
+      const rentalPremium = property.isRental ? 1.05 : 1; // Rental premium if applicable
+      
+      const currentValue = Math.round(
+        property.price * // Original price
+        appreciationMultiplier * // Basic appreciation
+        marketPriceRatio * // Market conditions
+        conditionAdjustment * // Condition adjustment
+        rentalPremium // Rental premium if applicable
+      );
+      
+      console.log("Appreciation years:", yearsSincePurchase);
+      console.log("Appreciation multiplier:", appreciationMultiplier);
+      console.log("Market price ratio:", marketPriceRatio);
+      console.log("Current value:", currentValue);
+      
+      // Calculate net proceeds after paying off mortgage and ERC
+      const netProceeds = currentValue - remainingDebt - earlyRepaymentCharge;
+      console.log("Net proceeds:", netProceeds);
+
+      // Check if the sale would leave enough money to pay off the mortgage and ERC
+      if (netProceeds < 0) {
+        console.log("Negative equity situation");
+        game.addNotification(`Cannot sell property - sale price (${formatCurrency(currentValue)}) is less than remaining mortgage (${formatCurrency(remainingDebt)}) plus early repayment charge (${formatCurrency(earlyRepaymentCharge)})`);
+        return;
+      }
+
+      // Calculate capital gain/loss (sale price minus purchase price)
+      const capitalGain = currentValue - property.price;
+      console.log("Capital gain:", capitalGain);
+      
+      // Add capital gain to tax tracking if positive
+      if (capitalGain > 0) {
+        game.player.capitalGains.currentTaxYear += capitalGain;
+      }
+
+      // Pay off the mortgage and add remaining proceeds to cash
+      game.player.cash += netProceeds;
+      console.log("Updated player cash:", game.player.cash);
+      
+      // Handle rental status
+      if (property.isRental && property.rentalIncome) {
+        const monthlyLoss = property.rentalIncome;
+        game.addNotification(`Monthly rental income will decrease by ${formatCurrency(monthlyLoss)}`);
+        game.addNotification(`Property sold with existing tenants - added 5% to sale value`);
+      }
+      
+      // Remove from properties array
+      const propertyIndex = game.player.properties.findIndex(p => p === property);
+      if (propertyIndex !== -1) {
+        game.player.properties.splice(propertyIndex, 1);
+        console.log("Property removed from array");
+      }
+      
+      game.addNotification(`Sold ${property.name} for ${formatCurrency(currentValue)}. Net proceeds after mortgage: ${formatCurrency(netProceeds)}`);
+      if (capitalGain > 0) {
+        game.addNotification(`Capital gain of ${formatCurrency(capitalGain)} will be subject to tax`);
+      }
+      
+      // Update the game state
+      updateGame(game);
+      
+      // Close the modal after successful sale
+      onClose();
+      
+    } catch (error) {
+      console.error("Error selling property:", error);
+      game.addNotification("An error occurred while selling the property");
+    }
+  };
+
+  const calculateEstimatedRent = (house: Housing): number => {
+    // Get base rent for the region
+    const baseRent = GAME_DATA.rentPrice[house.location][game.player.currentYear] || 
+                    GAME_DATA.rentPrice[house.location][Number(Object.keys(GAME_DATA.rentPrice[house.location]).slice(-1)[0])];
+    
+    // Adjust rent based on size (baseRent is for 50m²)
+    const sizeMultiplier = house.size / 50;
+    
+    // Adjust for condition (±10% per point difference from 7, which is the baseline condition)
+    const conditionAdjustment = 1 + ((house.condition - 7) * 0.1);
+    
+    return Math.round(baseRent * sizeMultiplier * conditionAdjustment);
+  };
+
+  const calculateTransportCostChange = (house: Housing): number => {
+    const currentLocation = game.player.housing?.location || game.player.location;
+    const currentMultiplier = GAME_DATA.transportCostMultiplier[currentLocation];
+    const newMultiplier = GAME_DATA.transportCostMultiplier[house.location];
+    
+    return game.player.baseExpenses.transport * (newMultiplier - currentMultiplier);
+  };
+
+  const calculatePropertyValue = (property: Housing) => {
+    const basePrice = GAME_DATA.housePrice[property.location][game.player.currentYear] || 
+                     GAME_DATA.housePrice[property.location][Number(Object.keys(GAME_DATA.housePrice[property.location]).slice(-1)[0])];
+    
+    const marketPriceRatio = property.purchaseYear
+      ? basePrice / (GAME_DATA.housePrice[property.location][property.purchaseYear] || basePrice)
+      : 1;
+    const conditionAdjustment = 1 + ((property.condition - 7) * 0.1);
+    const rentalPremium = property.isRental ? 1.05 : 1;
+    
+    return Math.round(
+      property.price * 
+      marketPriceRatio * 
+      conditionAdjustment * 
+      rentalPremium
+    );
+  };
+
   return (
     <div className="housing-market">
       <div className="housing-options">
+        <div className="housing-section">
+          <div className="housing-section">
+            <div 
+              className={`section-header ${expandedSection === 'owned' ? 'expanded' : ''}`}
+              onClick={() => toggleSection('owned')}
+            >
+              <h3>My Properties</h3>
+              <span className="material-icons">
+                {expandedSection === 'owned' ? 'expand_less' : 'expand_more'}
+              </span>
+            </div>
+            {expandedSection === 'owned' && (
+              <div className="houses-grid">
+                {game.player.housing && (
+                  <div className="house-card primary-residence">
+                    <div className="house-summary">
+                      <h4>{game.player.housing.name}</h4>
+                      <p className="property-tag">Primary Residence</p>
+                      <p>Type: {game.player.housing.type === 'OWNED' ? 'Owned' : 'Rented'}</p>
+                      <p>{game.player.housing.type === 'OWNED' ? 'Value' : 'Monthly Rent'}: {formatCurrency(game.player.housing.type === 'OWNED' ? game.player.housing.price : game.player.housing.monthlyPayment)}</p>
+                      <p>Size: {game.player.housing.size}m² ({convertSqMToSqFt(game.player.housing.size)} sq ft)</p>
+                      <p>Location: {game.player.housing.location}</p>
+                      <p>Condition: {game.player.housing.condition}/10</p>
+                      {game.player.housing.type === 'OWNED' && (
+                        <>
+                          <p>Property Tax: {formatCurrency(game.player.housing.propertyTax || 0)}/year</p>
+                          <p>Mortgage Payment: {formatCurrency(game.player.monthlyHousingPayment)}/month</p>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {game.player.properties.map((property, index) => (
+                  property !== game.player.housing && (
+                    <div key={index} className="house-card investment-property">
+                      <div className="house-summary">
+                        <h4>{property.name}</h4>
+                        <p className="property-tag">Investment Property</p>
+                        <p>Purchase Price: {formatCurrency(property.price)}</p>
+                        <p className="estimated-value">Est. Current Value: {(() => {
+                          // Get current market price for the location
+                          const basePrice = GAME_DATA.housePrice[property.location][game.player.currentYear] || 
+                                          GAME_DATA.housePrice[property.location][Number(Object.keys(GAME_DATA.housePrice[property.location]).slice(-1)[0])];
+                          
+                          return formatCurrency(
+                            property.price * // Original price
+                            (basePrice / (GAME_DATA.housePrice[property.location][property.purchaseYear] || basePrice)) * // Market conditions
+                            (1 + ((property.condition - 7) * 0.1)) * // Condition adjustment
+                            (property.isRental ? 1.05 : 1) // Rental premium if applicable
+                          );
+                        })()}</p>
+                        <p>Size: {property.size}m² ({convertSqMToSqFt(property.size)} sq ft)</p>
+                        <p>Location: {property.location}</p>
+                        <p>Condition: {property.condition}/10</p>
+                        <p>Property Tax: {formatCurrency(property.propertyTax || 0)}/year</p>
+                        <p>Mortgage Payment: {formatCurrency(property.monthlyPayment)}/month</p>
+                        {property.isRental ? (
+                          <p className="rental-income">Rental Income: {formatCurrency(property.rentalIncome || 0)}/month</p>
+                        ) : (
+                          <p className="estimated-rent">Est. Rental Income: {formatCurrency(calculateEstimatedRent(property) * 0.95)}/month</p>
+                        )}
+                        <div className="property-actions">
+                          <button 
+                            className="action-button move-in"
+                            onClick={() => handleMoveIn(property)}
+                          >
+                            Move In
+                          </button>
+                          {!property.isRental ? (
+                            <button 
+                              className="action-button rent-out"
+                              onClick={() => handleRentOut(property)}
+                            >
+                              Rent Out
+                            </button>
+                          ) : (
+                            <button 
+                              className="action-button stop-renting"
+                              onClick={() => handleStopRenting(property)}
+                            >
+                              Stop Renting
+                            </button>
+                          )}
+                          <button 
+                            className="action-button sell"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSaleConfirmation(property, index);
+                            }}
+                            disabled={property === game.player.housing}
+                            title={property === game.player.housing ? "Cannot sell primary residence" : ""}
+                          >
+                            Sell
+                          </button>
+                        </div>
+                        {!property.isRental && (
+                          <div className="investment-details">
+                            <h4>Rental Potential</h4>
+                            <p>Estimated Monthly Rent: {formatCurrency(calculateEstimatedRent(property) * 0.95)}</p>
+                            <p>Monthly Mortgage: {formatCurrency(property.monthlyPayment)}</p>
+                            <p className="cash-flow">Est. Monthly Cash Flow: {formatCurrency(calculateEstimatedRent(property) * 0.95 - property.monthlyPayment)}</p>
+                            <p>Est. Annual Return: {((calculateEstimatedRent(property) * 0.95 * 12 / property.downPayment) * 100).toFixed(1)}% (before expenses)</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                ))}
+                {!game.player.housing && game.player.properties.length === 0 && (
+                  <div className="no-properties-message">
+                    <p>You don't own any properties yet.</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
         <div className="housing-section">
           <div 
             className={`section-header ${expandedSection === 'houses' ? 'expanded' : ''}`}
             onClick={() => toggleSection('houses')}
           >
-            <h3>Houses for Sale</h3>
+            <div className="section-header-content">
+              <h3>Houses for Sale</h3>
+              {expandedSection === 'houses' && (
+                <button className="refresh-button" onClick={(e) => {
+                  e.stopPropagation();
+                  handleRefresh();
+                }}>
+                  <span className="material-icons">refresh</span>
+                  New Listings
+                </button>
+              )}
+            </div>
             <span className="material-icons">
               {expandedSection === 'houses' ? 'expand_less' : 'expand_more'}
             </span>
@@ -129,6 +533,7 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
                     <p>Size: {house.size}m² ({convertSqMToSqFt(house.size)} sq ft)</p>
                     <p>Location: {house.location}</p>
                     <p>Condition: {house.condition}/10</p>
+                    <p className="estimated-rent">Est. Monthly Rent: {formatCurrency(calculateEstimatedRent(house))}</p>
                   </div>
                   {selectedHouse?.name === house.name && (
                     <div className="house-details-modal">
@@ -155,6 +560,13 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
                             <p className="error-message">Insufficient funds for down payment</p>
                           )}
                         </div>
+                        <div className="investment-details">
+                          <h4>Investment Potential</h4>
+                          <p>Estimated Monthly Rent: {formatCurrency(calculateEstimatedRent(house))}</p>
+                          <p>Monthly Mortgage: {formatCurrency(calculateMortgage(house))}</p>
+                          <p className="cash-flow">Monthly Cash Flow: {formatCurrency(calculateEstimatedRent(house) - calculateMortgage(house))}</p>
+                          <p>Annual Return: {((calculateEstimatedRent(house) * 12 / calculateDownPayment(house)) * 100).toFixed(1)}% (before expenses)</p>
+                        </div>
                         <button 
                           onClick={() => handleBuyHouse(house)}
                           disabled={!canAffordDownPayment(house)}
@@ -176,7 +588,18 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
             className={`section-header ${expandedSection === 'rentals' ? 'expanded' : ''}`}
             onClick={() => toggleSection('rentals')}
           >
-            <h3>Houses for Rent</h3>
+            <div className="section-header-content">
+              <h3>Houses for Rent</h3>
+              {expandedSection === 'rentals' && (
+                <button className="refresh-button" onClick={(e) => {
+                  e.stopPropagation();
+                  handleRefresh();
+                }}>
+                  <span className="material-icons">refresh</span>
+                  New Listings
+                </button>
+              )}
+            </div>
             <span className="material-icons">
               {expandedSection === 'rentals' ? 'expand_less' : 'expand_more'}
             </span>
@@ -215,6 +638,100 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
           )}
         </div>
       </div>
+
+      {/* Add Sale Confirmation Modal */}
+      {saleConfirmation && (
+        <div className="modal-overlay">
+          <div className="sale-confirmation-modal">
+            <h3>Confirm Property Sale</h3>
+            <div className="sale-details">
+              <h4>{saleConfirmation.property.name}</h4>
+              
+              <div className="financial-breakdown">
+                <div className="breakdown-item">
+                  <span>Original Purchase Price:</span>
+                  <span>{formatCurrency(saleConfirmation.property.price)}</span>
+                </div>
+                
+                <div className="breakdown-item">
+                  <span>Current Market Value:</span>
+                  <span>{formatCurrency(calculatePropertyValue(saleConfirmation.property))}</span>
+                </div>
+                
+                <div className="breakdown-item">
+                  <span>Remaining Mortgage:</span>
+                  <span className="negative">
+                    {formatCurrency(calculateRemainingMortgage(saleConfirmation.property))}
+                  </span>
+                </div>
+
+                {calculateEarlyRepaymentCharge(saleConfirmation.property) > 0 && (
+                  <div className="breakdown-item">
+                    <span>Early Repayment Charge:</span>
+                    <span className="negative">
+                      {formatCurrency(calculateEarlyRepaymentCharge(saleConfirmation.property))}
+                    </span>
+                    <p className="erc-explanation">*Early repayment charge applies as you're selling before the end of your fixed-rate period</p>
+                  </div>
+                )}
+                
+                {saleConfirmation.property.isRental && (
+                  <div className="breakdown-item rental-note">
+                    <span>Monthly Rental Income Loss:</span>
+                    <span className="negative">-{formatCurrency(saleConfirmation.property.rentalIncome || 0)}</span>
+                  </div>
+                )}
+                
+                <div className="breakdown-item capital-gains">
+                  <span>Capital Gain/Loss:</span>
+                  <span className={calculatePropertyValue(saleConfirmation.property) - saleConfirmation.property.price > 0 ? 'positive' : 'negative'}>
+                    {formatCurrency(calculatePropertyValue(saleConfirmation.property) - saleConfirmation.property.price)}
+                  </span>
+                </div>
+                
+                {calculatePropertyValue(saleConfirmation.property) - saleConfirmation.property.price > 0 && (
+                  <div className="breakdown-item tax-note">
+                    <span>Estimated Capital Gains Tax:</span>
+                    <span className="negative">
+                      {formatCurrency((calculatePropertyValue(saleConfirmation.property) - saleConfirmation.property.price) * 0.20)}
+                    </span>
+                    <p className="tax-explanation">*20% on profit, payable in next tax year</p>
+                  </div>
+                )}
+                
+                <div className="breakdown-item net-proceeds">
+                  <span>Net Proceeds:</span>
+                  <span className="highlight">
+                    {formatCurrency(
+                      calculatePropertyValue(saleConfirmation.property) - 
+                      calculateRemainingMortgage(saleConfirmation.property) -
+                      calculateEarlyRepaymentCharge(saleConfirmation.property)
+                    )}
+                  </span>
+                </div>
+              </div>
+
+              <div className="confirmation-buttons">
+                <button 
+                  className="confirm-sale"
+                  onClick={() => {
+                    handleSellProperty(saleConfirmation.property, saleConfirmation.index);
+                    setSaleConfirmation(null);
+                  }}
+                >
+                  Confirm Sale
+                </button>
+                <button 
+                  className="cancel-sale"
+                  onClick={handleSaleCancel}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }; 

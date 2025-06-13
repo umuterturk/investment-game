@@ -1,3 +1,5 @@
+import { Region } from '../data/gameData';
+
 // Game State Enum
 export enum GameState {
     PAUSED = 'paused',
@@ -93,7 +95,7 @@ export interface Player {
     married: boolean;
     car: Car | null;
     insurance: Insurance;
-    location: string;
+    location: Region;
     baseExpenses: Omit<MonthlyExpenses, 'rent'>;
     monthlyExpenses: MonthlyExpenses;
     monthlyIncome: number;
@@ -103,6 +105,8 @@ export interface Player {
     currentMonthPrices: Record<string, number>;
     dailyVolatility: number;
     capitalGains: CapitalGains;
+    housing: Housing | null;
+    monthlyHousingPayment: number;
 }
 
 // Event History Item type
@@ -156,18 +160,21 @@ export interface GameDataConfig {
 
 export interface Housing {
     id: string;
-    type: 'RENT' | 'OWNED';
+    type: 'OWNED' | 'RENT';
     name: string;
-    location: string;
+    location: Region;
     price: number;
     monthlyPayment: number;
-    size: number; // in square feet
-    condition: number; // 1-10 rating
-    appreciationRate: number; // yearly appreciation rate
-    propertyTax?: number; // only for owned properties
-    downPayment?: number; // only for owned properties
-    mortgageRate?: number; // only for owned properties
-    mortgageTermYears?: number; // only for owned properties
+    size: number;
+    condition: number;
+    appreciationRate: number;
+    propertyTax?: number;
+    mortgageRate?: number;
+    mortgageTermYears?: number;
+    downPayment?: number;
+    isRental?: boolean;
+    rentalIncome?: number;
+    purchaseYear?: number;
 }
 
 export interface HousingMarket {

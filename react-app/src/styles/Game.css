@@ -1,0 +1,72 @@
+.game-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background-color: #2a2a2a;
+    padding: 20px;
+    border-radius: 8px;
+    max-width: 600px;
+    width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+    position: relative;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.modal-header h2 {
+    margin: 0;
+    color: #fff;
+}
+
+.close-button {
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 0;
+}
+
+.close-button:hover {
+    color: #e74c3c;
+}
+
+.modal-body {
+    color: #fff;
+}
+
+.income-section,
+.expenses-section,
+.net-income-section {
+    margin-bottom: 20px;
+    padding: 15px;
+    background-color: #333;
+    border-radius: 6px;
+}
+
+.income-section h4,
+.expenses-section h4,
+.net-income-section h4 {
+    margin-top: 0;
+    color: #3498db;
+}
+
+.net-income-section h4 {
+    color: #2ecc71;
+} 

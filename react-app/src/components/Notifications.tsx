@@ -1,24 +1,22 @@
 import React from 'react';
-import { useGameContext } from '../context/GameContext';
+import { Game } from '../models/Game';
 import '../styles/Notifications.css';
 
-const Notifications: React.FC = () => {
-    const { game } = useGameContext();
+interface NotificationsProps {
+    game: Game;
+}
 
+const Notifications: React.FC<NotificationsProps> = ({ game }) => {
     return (
-        <div className="notification-area">
+        <div className="notifications-container">
             <h3>Notifications</h3>
-            <div className="notifications">
+            <div className="notifications-list">
                 {game.notifications.map((notification, index) => (
                     <div key={index} className="notification-item">
-                        {notification}
+                        <span className="notification-timestamp">{notification.timestamp}</span>
+                        <span className="notification-message">{notification.message}</span>
                     </div>
                 ))}
-                {game.notifications.length === 0 && (
-                    <div className="notification-item empty">
-                        No notifications yet.
-                    </div>
-                )}
             </div>
         </div>
     );

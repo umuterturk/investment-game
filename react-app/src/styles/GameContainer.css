@@ -86,4 +86,116 @@
     .game-main {
         flex-direction: column;
     }
+}
+
+.income-details {
+    text-align: left;
+}
+
+.income-details h4 {
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--border-color);
+    font-weight: 500;
+    font-size: 1.2rem;
+    margin-bottom: 0;
+}
+
+.income-details .income-section,
+.income-details .tax-section,
+.income-details .expenses-section,
+.income-details .net-income-section {
+    padding: 12px 15px;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    background-color: var(--bg-secondary);
+}
+
+.income-details p {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 8px 0;
+    color: var(--text-secondary);
+    font-size: 0.95em;
+}
+
+.income-details p strong {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.income-details .net-income-section {
+    border: 1px solid var(--border-color);
+    background-color: var(--bg-primary);
+}
+
+.income-details .net-income-section h4 {
+    color: var(--text-primary);
+    margin-bottom: 5px;
+    border-bottom: none;
+}
+
+.income-details .small-text {
+    font-size: 0.85em;
+    color: var(--text-secondary);
+    text-align: center;
+    display: block;
+    margin-top: 4px;
+}
+
+/* Subtle indicators for income vs expenses */
+.income-details .income-section p span:last-child {
+    font-weight: 500;
+}
+
+.income-details .tax-section p span:last-child,
+.income-details .expenses-section p span:last-child {
+    font-weight: 500;
+}
+
+/* Make the final net income more prominent but subtle */
+.income-details .net-income-section h4 {
+    font-size: 1.1em;
+    font-weight: 500;
+}
+
+.status-details {
+    padding: 15px;
+}
+
+.status-details .detail-section {
+    margin-bottom: 25px;
+}
+
+.status-details .detail-section:last-child {
+    margin-bottom: 0;
+}
+
+.status-details h4 {
+    color: var(--text-primary);
+    margin: 0 0 15px 0;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-color);
+    font-weight: 500;
+}
+
+.status-details .detail-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    color: var(--text-secondary);
+}
+
+.status-details .detail-item:not(:last-child) {
+    border-bottom: 1px solid var(--border-color-light);
+}
+
+.status-details .label {
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.status-details .detail-item span:last-child {
+    color: var(--text-primary);
 } 

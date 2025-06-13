@@ -38,6 +38,9 @@ interface Salaries {
     [key: number]: number;
 }
 
+// Define the Region type
+export type Region = 'London' | 'South East' | 'East of England' | 'South West' | 'West Midlands' | 'North West';
+
 export const GAME_DATA = {
     // Game Configuration
     config: {
@@ -45,11 +48,11 @@ export const GAME_DATA = {
         startMonth: 0, // January
         startAge: 25,
         endAge: 45,
-        startingCash: 50000,
+        startingCash: 15000,
         timePerMonth: 15000, // 15 seconds per month in normal speed
         fastTimePerMonth: 3000, // 3 seconds per month in fast speed
-        monthNames: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-        regions: ['London', 'South East', 'East of England', 'South West', 'West Midlands', 'East Midlands', 'Yorkshire', 'North West', 'North East', 'Scotland', 'Wales', 'Northern Ireland'],
+        monthNames: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+        regions: ['London', 'South East', 'East of England', 'South West', 'West Midlands', 'North West'] as Region[],
     },
     
     // Historical Interest Rates (Bank of England base rate)
@@ -459,5 +462,15 @@ export const GAME_DATA = {
                 }
             }
         }
-    ]
-}; 
+    ],
+
+    // Transport cost multipliers by region (London as baseline)
+    transportCostMultiplier: {
+        'London': 0.8,        // Best public transport, lowest costs
+        'South East': 1.0,    // Good connections to London
+        'East of England': 1.1,
+        'South West': 1.2,
+        'West Midlands': 1.1,
+        'North West': 1.2     // More reliance on private transport
+    } as const satisfies Record<Region, number>,
+} as const; 

@@ -414,28 +414,87 @@ const GameHeader: React.FC = () => {
 
     // Show detail modals
     const showDateDetails = (): void => {
-        setModalTitle('Date Details');
+        setModalTitle('Status Overview');
         setModalContent(
-            <div className="date-details">
-                <div className="detail-item">
-                    <span className="label">Elapsed Time:</span>
-                    <span>{getElapsedTime()}</span>
+            <div className="status-details">
+                <div className="detail-section">
+                    <h4>Personal Information</h4>
+                    <div className="detail-item">
+                        <span className="label">Date:</span>
+                        <span>{getDateString()}</span>
+                    </div>
+                    <div className="detail-item">
+                        <span className="label">Age:</span>
+                        <span>{game.player.age} years old</span>
+                    </div>
+                    <div className="detail-item">
+                        <span className="label">Living in:</span>
+                        <span>{game.player.location}</span>
+                    </div>
+                    <div className="detail-item">
+                        <span className="label">Working in:</span>
+                        <span>{game.player.workLocation}</span>
+                    </div>
+                    <div className="detail-item">
+                        <span className="label">Commute:</span>
+                        <span>{game.player.location === game.player.workLocation ? 'Local' : 'Long Distance'}</span>
+                    </div>
                 </div>
-                <div className="detail-item">
-                    <span className="label">Current Date:</span>
-                    <span>{`${game.player.currentDay.toString().padStart(2, '0')}/${(game.player.currentMonth + 1).toString().padStart(2, '0')}/${game.player.currentYear}`}</span>
+
+                <div className="detail-section">
+                    <h4>Life Satisfaction</h4>
+                    <div className="detail-item">
+                        <span className="label">Overall Happiness:</span>
+                        <span>{getHappinessEmoji(game.player.happiness.total)} {game.player.happiness.total.toFixed(0)}%</span>
+                    </div>
+                    <div className="detail-item">
+                        <span className="label">Financial Well-being:</span>
+                        <span>{game.player.happiness.factors.financial.toFixed(0)}%</span>
+                    </div>
+                    <div className="detail-item">
+                        <span className="label">Living Conditions:</span>
+                        <span>{game.player.happiness.factors.living.toFixed(0)}%</span>
+                    </div>
+                    <div className="detail-item">
+                        <span className="label">Work-Life Balance:</span>
+                        <span>{game.player.happiness.factors.workLife.toFixed(0)}%</span>
+                    </div>
+                    <div className="detail-item">
+                        <span className="label">Social Life:</span>
+                        <span>{game.player.happiness.factors.social.toFixed(0)}%</span>
+                    </div>
+                    <div className="detail-item">
+                        <span className="label">Health & Lifestyle:</span>
+                        <span>{game.player.happiness.factors.health.toFixed(0)}%</span>
+                    </div>
                 </div>
-                <div className="detail-item">
-                    <span className="label">Your Age:</span>
-                    <span>{game.player.age} years</span>
-                </div>
-                <div className="detail-item">
-                    <span className="label">Game Progress:</span>
-                    <span>{Math.floor((game.player.age - GAME_DATA.config.startAge) / (GAME_DATA.config.endAge - GAME_DATA.config.startAge) * 100)}%</span>
+
+                <div className="detail-section">
+                    <h4>Family Status</h4>
+                    <div className="detail-item">
+                        <span className="label">Marital Status:</span>
+                        <span>{game.player.married ? 'Married' : 'Single'}</span>
+                    </div>
+                    <div className="detail-item">
+                        <span className="label">Children:</span>
+                        <span>{game.player.children}</span>
+                    </div>
+                    <div className="detail-item">
+                        <span className="label">Employment:</span>
+                        <span>{game.player.jobLossMonths > 0 ? `Unemployed (${game.player.jobLossMonths} months remaining)` : 'Employed'}</span>
+                    </div>
                 </div>
             </div>
         );
         setIsModalOpen(true);
+    };
+
+    const getHappinessEmoji = (happiness: number): string => {
+        if (happiness >= 90) return '😄';
+        if (happiness >= 70) return '🙂';
+        if (happiness >= 50) return '😐';
+        if (happiness >= 30) return '🙁';
+        return '😢';
     };
 
     const showCashDetails = (): void => {
@@ -523,9 +582,13 @@ const GameHeader: React.FC = () => {
     const showIncomeDetails = (): void => {
         // Calculate rental income
         let rentalIncome = 0;
+        let totalMortgagePayments = 0;
         for (const property of game.player.properties) {
             if (property.isRental && property.rentalIncome) {
                 rentalIncome += property.rentalIncome;
+            }
+            if (property.monthlyPayment) {
+                totalMortgagePayments += property.monthlyPayment;
             }
         }
 
@@ -535,43 +598,52 @@ const GameHeader: React.FC = () => {
         const monthlyRate = savingsRate / 100 / 12;
         const savingsInterest = game.player.savings * monthlyRate;
 
+        // Calculate total gross income
+        const grossIncome = game.player.monthlyIncome + rentalIncome + savingsInterest;
+
+        // Calculate income tax (yearly then monthly)
+        const yearlyGrossIncome = grossIncome * 12;
+        const yearlyTax = game.player.calculateIncomeTax(yearlyGrossIncome);
+        const monthlyTax = yearlyTax / 12;
+
         // Calculate total expenses
         const totalExpenses = game.player.getTotalExpenses();
 
-        // Calculate net income
-        const netIncome = game.player.monthlyIncome + rentalIncome + savingsInterest - totalExpenses;
+        // Calculate net income after tax and expenses
+        const netIncomeAfterTax = grossIncome - monthlyTax;
+        const netIncomeAfterExpenses = netIncomeAfterTax - totalExpenses - totalMortgagePayments;
 
         setModalTitle('Income Details');
         setModalContent(
             <div className="income-details">
-                <div className="detail-item">
-                    <span className="label">Net Monthly Income:</span>
-                    <span>{formatCurrency(netIncome)}</span>
+                <div className="income-section">
+                    <h4>Gross Income</h4>
+                    <p>Salary: {formatCurrency(game.player.monthlyIncome)}</p>
+                    {rentalIncome > 0 && <p>Rental Income: {formatCurrency(rentalIncome)}</p>}
+                    {savingsInterest > 0 && <p>Savings Interest: {formatCurrency(savingsInterest)}</p>}
+                    <p><strong>Total Gross Income: {formatCurrency(grossIncome)}</strong></p>
                 </div>
-                <div className="detail-item">
-                    <span className="label">Salary (after tax):</span>
-                    <span>{formatCurrency(game.player.monthlyIncome)}</span>
+                <div className="tax-section">
+                    <h4>Tax (Monthly)</h4>
+                    <p>Income Tax: {formatCurrency(monthlyTax)}</p>
+                    <p><strong>Net Income After Tax: {formatCurrency(netIncomeAfterTax)}</strong></p>
                 </div>
-                <div className="detail-item">
-                    <span className="label">Rental Income:</span>
-                    <span>{formatCurrency(rentalIncome)}</span>
+                <div className="expenses-section">
+                    <h4>Monthly Expenses</h4>
+                    {Object.entries(game.player.monthlyExpenses)
+                        .map(([category, amount]) => (
+                            <p key={category}>
+                                {category.charAt(0).toUpperCase() + category.slice(1)}: {formatCurrency(amount)}
+                            </p>
+                        ))}
+                    {totalMortgagePayments > 0 && (
+                        <p>Mortgage Payments: {formatCurrency(totalMortgagePayments)}</p>
+                    )}
+                    <p><strong>Total Expenses: {formatCurrency(totalExpenses + totalMortgagePayments)}</strong></p>
                 </div>
-                <div className="detail-item">
-                    <span className="label">Savings Interest:</span>
-                    <span>{formatCurrency(savingsInterest)}</span>
-                </div>
-                <div className="detail-item">
-                    <span className="label">Total Expenses:</span>
-                    <span>-{formatCurrency(totalExpenses)}</span>
-                </div>
-                <div className="detail-section">
-                    <h4>Expense Breakdown</h4>
-                    {Object.entries(game.player.monthlyExpenses).map(([category, amount]) => (
-                        <div className="detail-item" key={category}>
-                            <span className="label">{category.charAt(0).toUpperCase() + category.slice(1)}:</span>
-                            <span>{formatCurrency(amount)}</span>
-                        </div>
-                    ))}
+                <div className="net-income-section">
+                    <h4>Final Net Monthly Income: {formatCurrency(netIncomeAfterExpenses)}</h4>
+                    <p className="small-text">(after tax and expenses)</p>
                 </div>
             </div>
         );
@@ -593,9 +665,7 @@ const GameHeader: React.FC = () => {
                     <div className="header-item" onClick={showIncomeDetails}>
                         <span className="material-icons">payments</span>
                         <span id="net-income">
-                            {formatCurrency(
-                                game.player.monthlyIncome - game.player.getTotalExpenses()
-                            )}
+                            {formatCurrency(game.player.calculateNetMonthlyIncome())}
                         </span>
                     </div>
                 </div>

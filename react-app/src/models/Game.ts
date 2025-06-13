@@ -1,20 +1,26 @@
 import { Player } from './Player';
 import { GameState, EventHistoryItem, NewsEvent, RandomEventEffect, Housing, HousingMarket } from './types';
-import { GAME_DATA } from '../data/gameData';
+import { GAME_DATA, Region } from '../data/gameData';
 import { NEWS_EVENTS } from '../data/newsData';
+
+interface GameNotification {
+    message: string;
+    timestamp: string;
+}
 
 export class Game {
     player: Player;
     gameState: GameState;
     previousGameState: GameState | null;
     timePerDay: number;
-    notifications: string[];
+    notifications: GameNotification[];
     eventHistory: EventHistoryItem[];
     shownNews: string[];
     gameInterval: NodeJS.Timeout | null;
     soundEnabled: boolean;
     savedGames: { name: string, date: string, data: string }[];
     housingMarket: HousingMarket;
+    private _lastHappiness: number = 70;
 
     constructor() {
         console.log("Creating new Game instance");
@@ -64,17 +70,28 @@ export class Game {
         this.updatePrices();
         this.processDailyExpenses();
         
+        // Update happiness
+        this.player.calculateHappiness();
+        this.checkHappinessEvents();
+        
         // Process monthly updates on the first day of the month
         if (this.player.currentDay === 1) {
+            this.processRentTransactions();
             this.processMonthlyIncome();
             this.processSavingsInterest();
             this.processLoans();
+            this.player.adjustExpensesForInflation();
             
             // Check for news events
             this.checkForNews();
             
             // Process random events (only personal events, not historical ones)
             this.processRandomEvents();
+        }
+        
+        // Process yearly updates on January 1st
+        if (this.player.currentMonth === 0 && this.player.currentDay === 1) {
+            this.processYearEnd();
         }
         
         // Advance time
@@ -128,9 +145,13 @@ export class Game {
     }
 
     processDailyExpenses(): void {
-        // Calculate daily expenses (monthly expenses divided by days in month)
+        // Calculate daily expenses (monthly expenses divided by days in month, excluding rent)
         const daysInMonth = this.player.getDaysInMonth(this.player.currentMonth, this.player.currentYear);
-        const dailyExpenses = this.player.getTotalExpenses() / daysInMonth;
+        const monthlyExpensesWithoutRent = {
+            ...this.player.monthlyExpenses,
+            rent: 0 // Exclude rent as it's handled separately
+        };
+        const dailyExpenses = Object.values(monthlyExpensesWithoutRent).reduce((a, b) => a + b, 0) / daysInMonth;
         
         // Deduct daily expenses from cash
         this.player.cash -= dailyExpenses;
@@ -150,13 +171,33 @@ export class Game {
         }
         
         // Calculate monthly income based on current year
-        this.player.monthlyIncome = this.player.calculateMonthlyIncome();
+        const grossMonthlyIncome = this.player.calculateMonthlyIncome();
         
-        // Add income to cash
-        this.player.cash += this.player.monthlyIncome;
+        // Calculate yearly income for tax purposes (including rental income)
+        const projectedYearlyIncome = grossMonthlyIncome * 12;
         
-        // Add notification
-        this.addNotification(`You received your monthly income of £${this.player.monthlyIncome.toFixed(2)}.`);
+        // Calculate yearly tax
+        const yearlyTax = this.player.calculateIncomeTax(projectedYearlyIncome);
+        
+        // Calculate monthly tax
+        const monthlyTax = yearlyTax / 12;
+        
+        // Calculate net monthly income
+        const netMonthlyIncome = grossMonthlyIncome - monthlyTax;
+        
+        // Store gross monthly income
+        this.player.monthlyIncome = grossMonthlyIncome;
+        
+        // Add notification with tax details
+        this.addNotification(
+            `Monthly Income Summary:\n` +
+            `Gross Income: £${grossMonthlyIncome.toFixed(2)}\n` +
+            `Income Tax: £${monthlyTax.toFixed(2)}\n` +
+            `Net Income: £${netMonthlyIncome.toFixed(2)}`
+        );
+        
+        // Add net income to cash
+        this.player.cash += netMonthlyIncome;
     }
 
     processSavingsInterest(): void {
@@ -312,13 +353,20 @@ export class Game {
     }
 
     addNotification(message: string): void {
-        // Add notification to the list
-        this.notifications.unshift(message);
+        const timestamp = this.formatGameTime();
+        // Add to the beginning of the array (newest first)
+        this.notifications.unshift({ message, timestamp });
         
-        // Keep only the latest 10 notifications
-        if (this.notifications.length > 10) {
-            this.notifications.pop();
+        // Keep only the last 20 notifications
+        if (this.notifications.length > 20) {
+            this.notifications.pop(); // Remove from the end
         }
+    }
+
+    private formatGameTime(): string {
+        const startYear = GAME_DATA.config.startYear;
+        const yearsPlayed = this.player.currentYear - startYear;
+        return `${yearsPlayed}y ${this.player.currentMonth + 1}m ${this.player.currentDay}d`;
     }
 
     checkForNews(): NewsEvent | null {
@@ -1160,36 +1208,65 @@ export class Game {
     }
 
     private generateInitialHousingMarket(): HousingMarket {
-        // Get current property prices for each region
+        // Use the same logic as generateNewListings for consistency
+        this.generateNewListings();
+        return this.housingMarket;
+    }
+
+    generateNewListings(): void {
         const currentYear = this.player.currentYear;
         
-        // Only use regions that have price data
-        const availableRegions = Object.keys(GAME_DATA.housePrice);
-        
-        const houses: Housing[] = availableRegions.map((region, index) => {
+        // Get available regions from game config
+        const availableRegions = GAME_DATA.config.regions;
+
+        const houseTypes = [
+            { name: 'Studio Apartment', size: 35, condition: 8, multiplier: 0.8 },
+            { name: 'One Bedroom Flat', size: 50, condition: 7, multiplier: 1.0 },
+            { name: 'Two Bedroom Apartment', size: 70, condition: 7, multiplier: 1.3 },
+            { name: 'Three Bedroom House', size: 100, condition: 7, multiplier: 1.8 },
+            { name: 'Four Bedroom House', size: 130, condition: 7, multiplier: 2.2 },
+        ];
+
+        const houses: Housing[] = availableRegions.map(region => {
             // Get price per square meter for the region
             const pricePerSqm = GAME_DATA.housePrice[region][currentYear] || 
                                GAME_DATA.housePrice[region][Number(Object.keys(GAME_DATA.housePrice[region]).slice(-1)[0])];
             
-            // Define different house sizes and types for variety
-            const houseTypes = [
-                { name: 'Modern Apartment', size: 65, condition: 9 }, // ~700 sq ft
-                { name: 'Family Townhouse', size: 120, condition: 8 }, // ~1300 sq ft
-                { name: 'Detached House', size: 185, condition: 8 }, // ~2000 sq ft
+            // Pick a random house type
+            const houseType = houseTypes[Math.floor(Math.random() * houseTypes.length)];
+            
+            // Vary the condition slightly
+            const conditionVariation = Math.floor(Math.random() * 3) - 1;
+            const finalCondition = Math.max(1, Math.min(10, houseType.condition + conditionVariation));
+            
+            // Calculate total price
+            const basePrice = pricePerSqm * houseType.size;
+            
+            // Vary the price slightly (±10%)
+            const priceVariation = 0.9 + (Math.random() * 0.2);
+            const totalPrice = Math.round(basePrice * houseType.multiplier * priceVariation);
+            
+            // Add some variety to names
+            const nameVariations = [
+                `Charming ${houseType.name}`,
+                `Spacious ${houseType.name}`,
+                `Beautiful ${houseType.name}`,
+                `Modern ${houseType.name}`,
+                `Lovely ${houseType.name}`,
+                `Cozy ${houseType.name}`,
             ];
             
-            const house = houseTypes[index % houseTypes.length];
-            const totalPrice = Math.round(pricePerSqm * house.size);
+            const randomName = nameVariations[Math.floor(Math.random() * nameVariations.length)];
             
             return {
-                id: `house_${region}_${index}`,
-                type: 'OWNED',
-                name: `${house.name} in ${region}`,
+                id: `house_${region}_${Date.now()}`,
+                type: 'OWNED' as const,
+                name: `${randomName} in ${region}`,
                 location: region,
                 price: totalPrice,
                 monthlyPayment: 0,
-                size: house.size,
-                condition: house.condition,
+                size: houseType.size,
+                condition: finalCondition,
                 appreciationRate: 0.03,
                 propertyTax: Math.round(totalPrice * 0.01), // 1% property tax
                 mortgageRate: GAME_DATA.interestRates[currentYear] / 100 + 0.02, // Base rate + 2% margin
@@ -1197,40 +1274,198 @@ export class Game {
             };
         });
 
-        const rentals: Housing[] = availableRegions.map((region, index) => {
+        // Generate one rental per region
+        const rentalTypes = [
+            { name: 'Studio Apartment', size: 35, condition: 8, multiplier: 0.8 },
+            { name: 'One Bedroom Flat', size: 50, condition: 7, multiplier: 1.0 },
+            { name: 'Two Bedroom Apartment', size: 70, condition: 7, multiplier: 1.3 },
+        ];
+
+        const rentals: Housing[] = availableRegions.map(region => {
             // Get monthly rent for the region
             const baseRent = GAME_DATA.rentPrice[region][currentYear] || 
                            GAME_DATA.rentPrice[region][Number(Object.keys(GAME_DATA.rentPrice[region]).slice(-1)[0])];
             
-            // Define different rental property types
-            const rentalTypes = [
-                { name: 'Studio Apartment', size: 35, condition: 8, multiplier: 0.8 }, // ~375 sq ft
-                { name: 'One Bedroom Flat', size: 50, condition: 7, multiplier: 1.0 }, // ~540 sq ft
-                { name: 'Two Bedroom Apartment', size: 70, condition: 7, multiplier: 1.3 }, // ~750 sq ft
-            ];
+            // Pick a random rental type
+            const rentalType = rentalTypes[Math.floor(Math.random() * rentalTypes.length)];
             
-            const rental = rentalTypes[index % rentalTypes.length];
+            // Vary the condition slightly
+            const conditionVariation = Math.floor(Math.random() * 3) - 1;
+            const finalCondition = Math.max(1, Math.min(10, rentalType.condition + conditionVariation));
+            
+            // Vary the rent slightly (±5%)
+            const rentVariation = 0.95 + (Math.random() * 0.1);
+            const monthlyRent = Math.round(baseRent * rentalType.multiplier * rentVariation);
+            
+            // Add some variety to names
+            const nameVariations = [
+                `Charming ${rentalType.name}`,
+                `Spacious ${rentalType.name}`,
+                `Beautiful ${rentalType.name}`,
+                `Cozy ${rentalType.name}`,
+                `Lovely ${rentalType.name}`,
+                `Modern ${rentalType.name}`,
+            ];
+            const randomName = nameVariations[Math.floor(Math.random() * nameVariations.length)];
             
             return {
-                id: `rental_${region}_${index}`,
-                type: 'RENT',
-                name: `${rental.name} in ${region}`,
+                id: `rental_${region}_${Date.now()}`,
+                type: 'RENT' as const,
+                name: `${randomName} in ${region}`,
                 location: region,
                 price: 0,
-                monthlyPayment: Math.round(baseRent * rental.multiplier),
-                size: rental.size,
-                condition: rental.condition,
+                monthlyPayment: monthlyRent,
+                size: rentalType.size,
+                condition: finalCondition,
                 appreciationRate: 0
             };
         });
 
-        // Filter out any regions that don't have price data
-        const availableHouses = houses.filter(house => house.price > 0);
-        const availableRentals = rentals.filter(rental => rental.monthlyPayment > 0);
-
-        return {
-            availableHouses,
-            rentals: availableRentals
+        // Filter out any properties with invalid prices
+        this.housingMarket = {
+            availableHouses: houses.filter(house => house.price > 0),
+            rentals: rentals.filter(rental => rental.monthlyPayment > 0)
         };
+    }
+
+    showModal(title: string, content: string): void {
+        // Create a modal element
+        const modal = document.createElement('div');
+        modal.className = 'game-modal';
+        modal.innerHTML = `
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>${title}</h2>
+                    <button class="close-button">&times;</button>
+                </div>
+                <div class="modal-body">
+                    ${content}
+                </div>
+            </div>
+        `;
+
+        // Add close functionality
+        const closeButton = modal.querySelector('.close-button');
+        const closeModal = () => {
+            document.body.removeChild(modal);
+            document.removeEventListener('keydown', handleEscape);
+        };
+        
+        const handleEscape = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                closeModal();
+            }
+        };
+
+        closeButton?.addEventListener('click', closeModal);
+        document.addEventListener('keydown', handleEscape);
+
+        // Add modal to body
+        document.body.appendChild(modal);
+    }
+
+    processRentTransactions(): void {
+        // Only process rent on the first day of the month
+        if (this.player.currentDay !== 1) {
+            return;
+        }
+
+        // Process rent payment if player is renting
+        if (this.player.housing?.type === 'RENT') {
+            this.player.cash -= this.player.monthlyHousingPayment;
+            this.addNotification(`Paid monthly rent of £${this.player.monthlyHousingPayment.toFixed(2)} for ${this.player.housing.name}`);
+        }
+
+        // Process rental income from investment properties
+        for (const property of this.player.properties) {
+            if (property.isRental && property.rentalIncome) {
+                this.player.cash += property.rentalIncome;
+                this.addNotification(`Received rental income of £${property.rentalIncome.toFixed(2)} from ${property.name}`);
+            }
+        }
+    }
+
+    private checkHappinessEvents(): void {
+        const happiness = this.player.happiness;
+        
+        // Check for severe unhappiness
+        if (happiness.total < 30) {
+            if (Math.random() < 0.01) { // 1% chance per day when very unhappy
+                this.triggerNegativeLifeEvent();
+            }
+        }
+        
+        // Check for high happiness benefits
+        if (happiness.total > 80) {
+            if (Math.random() < 0.01) { // 1% chance per day when very happy
+                this.triggerPositiveLifeEvent();
+            }
+        }
+        
+        // Notify about significant happiness changes
+        if (Math.abs(happiness.total - this._lastHappiness) > 10) {
+            this.addNotification(this.getHappinessChangeMessage(happiness.total - this._lastHappiness));
+        }
+        
+        this._lastHappiness = happiness.total;
+    }
+
+    private triggerNegativeLifeEvent(): void {
+        const events = [
+            {
+                message: "The stress is affecting your work performance. Your income decreased by 5%.",
+                effect: () => {
+                    this.player.monthlyIncome *= 0.95;
+                    this.player.addShortTermHappinessModifier(-5, 30);
+                }
+            },
+            {
+                message: "Your health is suffering from stress. Medical expenses increased.",
+                effect: () => {
+                    this.player.monthlyExpenses.other += 100;
+                    this.player.addShortTermHappinessModifier(-5, 30);
+                }
+            }
+        ];
+
+        const event = events[Math.floor(Math.random() * events.length)];
+        event.effect();
+        this.addNotification(event.message);
+    }
+
+    private triggerPositiveLifeEvent(): void {
+        const events = [
+            {
+                message: "Your positive attitude led to a performance bonus!",
+                effect: () => {
+                    this.player.cash += this.player.monthlyIncome * 0.5;
+                    this.player.addShortTermHappinessModifier(5, 30);
+                }
+            },
+            {
+                message: "Your work-life balance has improved. You received a small raise!",
+                effect: () => {
+                    this.player.monthlyIncome *= 1.02;
+                    this.player.addShortTermHappinessModifier(5, 30);
+                }
+            }
+        ];
+
+        const event = events[Math.floor(Math.random() * events.length)];
+        event.effect();
+        this.addNotification(event.message);
+    }
+
+    private getHappinessChangeMessage(change: number): string {
+        if (change > 0) {
+            return `Your life satisfaction has improved significantly! (+${change.toFixed(0)} points)`;
+        } else {
+            return `Your life satisfaction has decreased significantly. (${change.toFixed(0)} points)`;
+        }
+    }
+
+    private processYearEnd(): void {
+        // Implement year-end processing logic
+        console.log("Processing year-end...");
     }
 } 
