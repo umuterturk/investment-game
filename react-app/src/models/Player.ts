@@ -262,7 +262,7 @@ export class Player implements PlayerType {
         // Calculate yearly income for tax purposes
         const projectedYearlyIncome = totalGrossMonthly * 12;
         
-        // Calculate monthly tax
+        // Calculate yearly tax and then monthly tax
         const yearlyTax = this.calculateIncomeTax(projectedYearlyIncome);
         const monthlyTax = yearlyTax / 12;
         
@@ -285,23 +285,51 @@ export class Player implements PlayerType {
         }
         
         const brackets = GAME_DATA.incomeTax[closestYear];
-        let tax = 0;
         
-        // Calculate tax based on brackets
-        for (let i = brackets.length - 1; i > 0; i--) {
+        // Calculate income earned so far this year
+        const monthsPassed = this.currentMonth;
+        const monthlyIncome = yearlyIncome / 12;
+        const incomeSoFar = monthlyIncome * monthsPassed;
+        
+        // Calculate tax on income earned so far
+        let taxSoFar = 0;
+        for (let i = 1; i < brackets.length; i++) {
             const currentBracket = brackets[i];
             const prevBracket = brackets[i - 1];
             
-            if (yearlyIncome > prevBracket.threshold) {
+            if (incomeSoFar > prevBracket.threshold) {
                 const amountInBracket = Math.min(
-                    yearlyIncome - prevBracket.threshold,
+                    incomeSoFar - prevBracket.threshold,
                     (currentBracket.threshold - prevBracket.threshold) || Infinity
                 );
-                tax += amountInBracket * currentBracket.rate;
+                taxSoFar += amountInBracket * currentBracket.rate;
             }
         }
         
-        return tax;
+        // Calculate tax on this month's income
+        // First, determine which bracket the current income falls into
+        let currentMonthTax = 0;
+        let cumulativeIncome = incomeSoFar;
+        let previousCumulativeIncome = cumulativeIncome - monthlyIncome;
+        
+        for (let i = 1; i < brackets.length; i++) {
+            const currentBracket = brackets[i];
+            const prevBracket = brackets[i - 1];
+            
+            // Check if this month's income crosses a bracket threshold
+            if (cumulativeIncome > prevBracket.threshold) {
+                // Calculate the portion of this month's income that falls in this bracket
+                const startAmount = Math.max(previousCumulativeIncome, prevBracket.threshold);
+                const endAmount = Math.min(cumulativeIncome, currentBracket.threshold || Infinity);
+                
+                if (endAmount > startAmount) {
+                    currentMonthTax += (endAmount - startAmount) * currentBracket.rate;
+                }
+            }
+        }
+        
+        // Annualize the current month's tax for consistent return value
+        return currentMonthTax * 12;
     }
 
     getTotalExpenses(): number {

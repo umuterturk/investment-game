@@ -178,11 +178,9 @@ export class Game {
         // Calculate yearly income for tax purposes (including rental income)
         const projectedYearlyIncome = grossMonthlyIncome * 12;
         
-        // Calculate yearly tax
-        const yearlyTax = this.player.calculateIncomeTax(projectedYearlyIncome);
-        
-        // Calculate monthly tax
-        const monthlyTax = yearlyTax / 12;
+        // Calculate tax for this month (annualized for consistent interface)
+        const annualizedTax = this.player.calculateIncomeTax(projectedYearlyIncome);
+        const monthlyTax = annualizedTax / 12;
         
         // Calculate net monthly income
         const netMonthlyIncome = grossMonthlyIncome - monthlyTax;
@@ -380,7 +378,7 @@ export class Game {
     private formatGameTime(): string {
         const startYear = GAME_DATA.config.startYear;
         const yearsPlayed = this.player.currentYear - startYear;
-        return `${yearsPlayed}y ${this.player.currentMonth + 1}m ${this.player.currentDay}d`;
+        return `${yearsPlayed}y ${this.player.currentMonth}m ${this.player.currentDay}d`;
     }
 
     checkForNews(): NewsEvent | null {
