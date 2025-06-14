@@ -294,21 +294,39 @@ export const GAME_DATA = {
             id: 'fire',
             name: 'House Fire',
             description: 'A fire has damaged your property!',
-            probability: 0.002, // 0.2% chance per month
+            probability: 0.002, // Base 0.2% chance per month
             effect: (player: any) => {
                 if (player.properties.length > 0) {
-                    const property = player.properties[Math.floor(Math.random() * player.properties.length)];
-                    const damage = property.value * 0.15;
-                    if (player.insurance.home) {
-                        return {
-                            message: `Your property at ${property.location} had a fire, but insurance covered most of the damage. You paid a £500 excess.`,
-                            cashChange: -500
-                        };
-                    } else {
-                        return {
-                            message: `Your property at ${property.location} had a fire! Repairs cost £${damage.toFixed(0)}.`,
-                            cashChange: -damage
-                        };
+                    // Process each property individually
+                    for (const property of player.properties) {
+                        // Adjust probability based on condition
+                        // Properties in poor condition (below 5) have increased fire risk
+                        // Properties in good condition (above 7) have decreased fire risk
+                        const conditionModifier = (7 - property.condition) * 0.001; // 0.1% change per point difference from 7
+                        const finalProbability = 0.002 + conditionModifier;
+
+                        if (Math.random() < finalProbability) {
+                            const damage = property.value * (0.15 + (7 - property.condition) * 0.02); // More damage for worse condition
+                            if (player.insurance.home) {
+                                return {
+                                    message: `Your property at ${property.location} had a fire, but insurance covered most of the damage. You paid a £500 excess. Property condition decreased by 2 points.`,
+                                    cashChange: -500,
+                                    propertyEffect: {
+                                        id: property.id,
+                                        conditionChange: -2
+                                    }
+                                };
+                            } else {
+                                return {
+                                    message: `Your property at ${property.location} had a fire! Repairs cost £${damage.toFixed(0)}. Property condition decreased by 2 points.`,
+                                    cashChange: -damage,
+                                    propertyEffect: {
+                                        id: property.id,
+                                        conditionChange: -2
+                                    }
+                                };
+                            }
+                        }
                     }
                 }
                 return null;
@@ -401,15 +419,35 @@ export const GAME_DATA = {
             id: 'home_repair',
             name: 'Home Repair',
             description: 'Your home needs urgent repairs!',
-            probability: 0.003, // 0.3% chance per month
+            probability: 0.003, // Base 0.3% chance per month
             effect: (player: any) => {
                 if (player.properties.length > 0) {
-                    const property = player.properties[Math.floor(Math.random() * player.properties.length)];
-                    const repairCost = property.value * 0.03;
-                    return {
-                        message: `Your property at ${property.location} needs urgent repairs costing £${repairCost.toFixed(0)}.`,
-                        cashChange: -repairCost
-                    };
+                    // Process each property individually
+                    for (const property of player.properties) {
+                        // Adjust probability based on condition
+                        // Properties in poor condition have much higher repair needs
+                        const conditionModifier = Math.max(0, (7 - property.condition) * 0.002); // 0.2% increase per point below 7
+                        const finalProbability = 0.003 + conditionModifier;
+
+                        if (Math.random() < finalProbability) {
+                            // Repair cost increases for properties in worse condition
+                            const baseRepairCost = property.value * 0.03;
+                            const conditionMultiplier = 1 + Math.max(0, (7 - property.condition) * 0.2); // 20% more per point below 7
+                            const repairCost = baseRepairCost * conditionMultiplier;
+
+                            // Improve condition slightly after repairs
+                            const conditionImprovement = Math.min(2, 10 - property.condition);
+
+                            return {
+                                message: `Your property at ${property.location} needs urgent repairs costing £${repairCost.toFixed(0)}. Property condition improved by ${conditionImprovement} points after repairs.`,
+                                cashChange: -repairCost,
+                                propertyEffect: {
+                                    id: property.id,
+                                    conditionChange: conditionImprovement
+                                }
+                            };
+                        }
+                    }
                 }
                 return null;
             }

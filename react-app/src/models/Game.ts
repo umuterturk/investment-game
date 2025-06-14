@@ -281,6 +281,15 @@ export class Game {
                     this.player.children++;
                     this.player.monthlyExpenses.other += eventEffect.childExpense;
                 }
+
+                if ('propertyEffect' in eventEffect && eventEffect.propertyEffect) {
+                    // Find the affected property
+                    const property = this.player.properties.find(p => p.id === eventEffect.propertyEffect?.id);
+                    if (property) {
+                        // Apply condition change
+                        property.condition = Math.max(1, Math.min(10, property.condition + eventEffect.propertyEffect.conditionChange));
+                    }
+                }
                 
                 // Add notification
                 this.addNotification(eventEffect.message);
@@ -349,6 +358,9 @@ export class Game {
             // Reset for new tax year
             this.player.capitalGains.currentTaxYear = 0;
             this.player.capitalGains.allowanceUsed = 0;
+        } else {
+            // No capital gains during the tax year
+            this.addNotification(`Tax year ended with no capital gains to report.`);
         }
     }
 
@@ -1219,13 +1231,30 @@ export class Game {
         // Get available regions from game config
         const availableRegions = GAME_DATA.config.regions;
 
+        // Base property types without fixed multipliers
         const houseTypes = [
-            { name: 'Studio Apartment', size: 35, condition: 8, multiplier: 0.8 },
-            { name: 'One Bedroom Flat', size: 50, condition: 7, multiplier: 1.0 },
-            { name: 'Two Bedroom Apartment', size: 70, condition: 7, multiplier: 1.3 },
-            { name: 'Three Bedroom House', size: 100, condition: 7, multiplier: 1.8 },
-            { name: 'Four Bedroom House', size: 130, condition: 7, multiplier: 2.2 },
+            { name: 'Studio Apartment', baseSize: 35, baseCondition: 6 },
+            { name: 'One Bedroom Flat', baseSize: 50, baseCondition: 5 },
+            { name: 'Two Bedroom Apartment', baseSize: 70, baseCondition: 6 },
+            { name: 'Three Bedroom House', baseSize: 100, baseCondition: 7 },
+            { name: 'Four Bedroom House', baseSize: 130, baseCondition: 8 },
+            { name: 'Fixer-Upper Studio', baseSize: 35, baseCondition: 3 },
+            { name: 'Renovation Project Flat', baseSize: 50, baseCondition: 4 },
+            { name: 'Distressed Property', baseSize: 70, baseCondition: 2 }
         ];
+
+        // Calculate multiplier based on size and condition
+        const calculateMultiplier = (size: number, condition: number): number => {
+            // Size multiplier: increases non-linearly with size
+            // Reference: 50m² = 1.0
+            const sizeMultiplier = Math.pow(size / 50, 0.8); // Use power of 0.8 for diminishing returns
+            
+            // Condition multiplier: exponential impact
+            // Reference: condition 6 = 1.0 (changed from 5)
+            const conditionMultiplier = Math.pow(1.15, condition - 6); // 15% change per point difference from 6
+            
+            return sizeMultiplier * conditionMultiplier;
+        };
 
         const houses: Housing[] = availableRegions.map(region => {
             // Get price per square meter for the region
@@ -1235,16 +1264,25 @@ export class Game {
             // Pick a random house type
             const houseType = houseTypes[Math.floor(Math.random() * houseTypes.length)];
             
-            // Vary the condition slightly
-            const conditionVariation = Math.floor(Math.random() * 3) - 1;
-            const finalCondition = Math.max(1, Math.min(10, houseType.condition + conditionVariation));
+            // Randomize size (±10m²)
+            const sizeVariation = Math.floor(Math.random() * 21) - 10; // Random number between -10 and +10
+            const finalSize = Math.max(20, houseType.baseSize + sizeVariation); // Minimum 20m²
+            
+            // Randomize condition (±1 point from base, then -2 to +1 for final variation)
+            const baseConditionVariation = Math.floor(Math.random() * 3) - 1; // Random number between -1 and +1
+            const baseCondition = Math.max(1, Math.min(10, houseType.baseCondition + baseConditionVariation));
+            const finalConditionVariation = Math.floor(Math.random() * 4) - 2; // Random number between -2 and +1
+            const finalCondition = Math.max(1, Math.min(10, baseCondition + finalConditionVariation));
+            
+            // Calculate dynamic multiplier
+            const multiplier = calculateMultiplier(finalSize, finalCondition);
             
             // Calculate total price
-            const basePrice = pricePerSqm * houseType.size;
+            const basePrice = pricePerSqm * finalSize;
             
             // Vary the price slightly (±10%)
             const priceVariation = 0.9 + (Math.random() * 0.2);
-            const totalPrice = Math.round(basePrice * houseType.multiplier * priceVariation);
+            const totalPrice = Math.round(basePrice * multiplier * priceVariation);
             
             // Add some variety to names
             const nameVariations = [
@@ -1256,6 +1294,38 @@ export class Game {
                 `Cozy ${houseType.name}`,
             ];
             
+            // Add condition-specific descriptions
+            if (finalCondition <= 3) {
+                nameVariations.push(
+                    `Handyman's Dream ${houseType.name}`,
+                    `Investment Opportunity ${houseType.name}`,
+                    `Project ${houseType.name}`,
+                    `As-Is ${houseType.name}`
+                );
+            } else if (finalCondition >= 8) {
+                nameVariations.push(
+                    `Pristine ${houseType.name}`,
+                    `Luxury ${houseType.name}`,
+                    `Premium ${houseType.name}`,
+                    `Executive ${houseType.name}`
+                );
+            }
+            
+            // Add size-specific descriptions
+            if (finalSize >= houseType.baseSize + 5) {
+                nameVariations.push(
+                    `Generous ${houseType.name}`,
+                    `Large ${houseType.name}`,
+                    `Roomy ${houseType.name}`
+                );
+            } else if (finalSize <= houseType.baseSize - 5) {
+                nameVariations.push(
+                    `Compact ${houseType.name}`,
+                    `Efficient ${houseType.name}`,
+                    `Cozy ${houseType.name}`
+                );
+            }
+            
             const randomName = nameVariations[Math.floor(Math.random() * nameVariations.length)];
             
             return {
@@ -1265,9 +1335,9 @@ export class Game {
                 location: region,
                 price: totalPrice,
                 monthlyPayment: 0,
-                size: houseType.size,
+                size: finalSize,
                 condition: finalCondition,
-                appreciationRate: 0.03,
+                appreciationRate: 0.03 + ((finalCondition - 5) * 0.002), // Better condition = slightly better appreciation
                 propertyTax: Math.round(totalPrice * 0.01), // 1% property tax
                 mortgageRate: GAME_DATA.interestRates[currentYear] / 100 + 0.02, // Base rate + 2% margin
                 mortgageTermYears: 30
@@ -1276,9 +1346,11 @@ export class Game {
 
         // Generate one rental per region
         const rentalTypes = [
-            { name: 'Studio Apartment', size: 35, condition: 8, multiplier: 0.8 },
-            { name: 'One Bedroom Flat', size: 50, condition: 7, multiplier: 1.0 },
-            { name: 'Two Bedroom Apartment', size: 70, condition: 7, multiplier: 1.3 },
+            { name: 'Studio Apartment', baseSize: 35, baseCondition: 6 },
+            { name: 'One Bedroom Flat', baseSize: 50, baseCondition: 5 },
+            { name: 'Two Bedroom Apartment', baseSize: 70, baseCondition: 7 },
+            { name: 'Basic Studio', baseSize: 35, baseCondition: 4 },
+            { name: 'Budget Flat', baseSize: 50, baseCondition: 3 }
         ];
 
         const rentals: Housing[] = availableRegions.map(region => {
@@ -1289,13 +1361,22 @@ export class Game {
             // Pick a random rental type
             const rentalType = rentalTypes[Math.floor(Math.random() * rentalTypes.length)];
             
-            // Vary the condition slightly
-            const conditionVariation = Math.floor(Math.random() * 3) - 1;
-            const finalCondition = Math.max(1, Math.min(10, rentalType.condition + conditionVariation));
+            // Randomize size (±10m²)
+            const sizeVariation = Math.floor(Math.random() * 21) - 10; // Random number between -10 and +10
+            const finalSize = Math.max(20, rentalType.baseSize + sizeVariation); // Minimum 20m²
+            
+            // Randomize condition (±1 point from base, then -2 to +1 for final variation)
+            const baseConditionVariation = Math.floor(Math.random() * 3) - 1; // Random number between -1 and +1
+            const baseCondition = Math.max(1, Math.min(10, rentalType.baseCondition + baseConditionVariation));
+            const finalConditionVariation = Math.floor(Math.random() * 4) - 2; // Random number between -2 and +1
+            const finalCondition = Math.max(1, Math.min(10, baseCondition + finalConditionVariation));
+            
+            // Calculate dynamic multiplier for rent
+            const multiplier = calculateMultiplier(finalSize, finalCondition);
             
             // Vary the rent slightly (±5%)
             const rentVariation = 0.95 + (Math.random() * 0.1);
-            const monthlyRent = Math.round(baseRent * rentalType.multiplier * rentVariation);
+            const monthlyRent = Math.round(baseRent * multiplier * rentVariation);
             
             // Add some variety to names
             const nameVariations = [
@@ -1306,6 +1387,39 @@ export class Game {
                 `Lovely ${rentalType.name}`,
                 `Modern ${rentalType.name}`,
             ];
+
+            // Add condition-specific descriptions
+            if (finalCondition <= 3) {
+                nameVariations.push(
+                    `Basic ${rentalType.name}`,
+                    `Budget ${rentalType.name}`,
+                    `Student ${rentalType.name}`,
+                    `No Frills ${rentalType.name}`
+                );
+            } else if (finalCondition >= 8) {
+                nameVariations.push(
+                    `Luxury ${rentalType.name}`,
+                    `Premium ${rentalType.name}`,
+                    `Executive ${rentalType.name}`,
+                    `High-End ${rentalType.name}`
+                );
+            }
+
+            // Add size-specific descriptions
+            if (finalSize >= rentalType.baseSize + 5) {
+                nameVariations.push(
+                    `Generous ${rentalType.name}`,
+                    `Large ${rentalType.name}`,
+                    `Roomy ${rentalType.name}`
+                );
+            } else if (finalSize <= rentalType.baseSize - 5) {
+                nameVariations.push(
+                    `Compact ${rentalType.name}`,
+                    `Efficient ${rentalType.name}`,
+                    `Cozy ${rentalType.name}`
+                );
+            }
+
             const randomName = nameVariations[Math.floor(Math.random() * nameVariations.length)];
             
             return {
@@ -1315,7 +1429,7 @@ export class Game {
                 location: region,
                 price: 0,
                 monthlyPayment: monthlyRent,
-                size: rentalType.size,
+                size: finalSize,
                 condition: finalCondition,
                 appreciationRate: 0
             };

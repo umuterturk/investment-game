@@ -134,6 +134,10 @@ export interface RandomEventEffect {
     marketCrash?: boolean;
     divorce?: boolean;
     childExpense?: number;
+    propertyEffect?: {
+        id: string;
+        conditionChange: number;
+    };
 }
 
 // Random Event type

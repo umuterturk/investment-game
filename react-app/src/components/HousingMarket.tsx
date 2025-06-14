@@ -16,6 +16,7 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
   const [expandedSection, setExpandedSection] = useState<'houses' | 'rentals' | 'owned' | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [saleConfirmation, setSaleConfirmation] = useState<{property: Housing, index: number} | null>(null);
+  const [renovationConfirmation, setRenovationConfirmation] = useState<{property: Housing, cost: number} | null>(null);
 
   // Generate new listings when component mounts
   useEffect(() => {
@@ -381,6 +382,55 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
     );
   };
 
+  const calculateRenovationCost = (property: Housing): number => {
+    const baseValue = calculatePropertyValue(property);
+    const conditionMultiplier = Math.pow(1.5, property.condition - 1);
+    const sizeMultiplier = property.size / 50;
+    return Math.round(baseValue * 0.04 * conditionMultiplier * sizeMultiplier);
+  };
+
+  const handleRenovateConfirmation = (property: Housing) => {
+    if (property.isRental) {
+      game.addNotification("Cannot renovate while property is being rented out. Stop renting first.");
+      return;
+    }
+
+    if (property.condition >= 10) {
+      game.addNotification("This property is already in perfect condition!");
+      return;
+    }
+
+    const renovationCost = calculateRenovationCost(property);
+    setRenovationConfirmation({ property, cost: renovationCost });
+  };
+
+  const handleRenovate = () => {
+    if (!renovationConfirmation) return;
+
+    const { property, cost } = renovationConfirmation;
+
+    if (game.player.cash < cost) {
+      game.addNotification(`Not enough cash for renovation. Cost: ${formatCurrency(cost)}`);
+      setRenovationConfirmation(null);
+      return;
+    }
+
+    // Apply renovation
+    game.player.cash -= cost;
+    property.condition += 1;
+    
+    // Add notifications
+    game.addNotification(`Renovated ${property.name} from condition ${property.condition - 1} to ${property.condition}`);
+    game.addNotification(`Renovation cost: ${formatCurrency(cost)}`);
+    
+    setRenovationConfirmation(null);
+    updateGame(game);
+  };
+
+  const handleRenovateCancel = () => {
+    setRenovationConfirmation(null);
+  };
+
   return (
     <div className="housing-market">
       <div className="housing-options">
@@ -464,9 +514,17 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
                               className="action-button stop-renting"
                               onClick={() => handleStopRenting(property)}
                             >
-                              Stop Renting
+                              Stop Rent
                             </button>
                           )}
+                          <button 
+                            onClick={() => handleRenovateConfirmation(property)}
+                            className="action-button renovate"
+                            disabled={property.condition >= 10 || property.isRental}
+                            title={property.isRental ? "Stop renting out the property to renovate" : property.condition >= 10 ? "Property is in perfect condition" : "Renovate property"}
+                          >
+                            Renovate
+                          </button>
                           <button 
                             className="action-button sell"
                             onClick={(e) => {
@@ -724,6 +782,138 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
                 <button 
                   className="cancel-sale"
                   onClick={handleSaleCancel}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Renovation Confirmation Modal */}
+      {renovationConfirmation && (
+        <div className="modal-overlay">
+          <div className="sale-confirmation-modal">
+            <h3>Confirm Renovation</h3>
+            <div className="sale-details">
+              <h4>{renovationConfirmation.property.name}</h4>
+              
+              <div className="financial-breakdown">
+                <div className="breakdown-item">
+                  <span>Current Condition:</span>
+                  <span>{renovationConfirmation.property.condition}/10</span>
+                </div>
+                
+                <div className="breakdown-item">
+                  <span>New Condition:</span>
+                  <span className="positive">{renovationConfirmation.property.condition + 1}/10</span>
+                </div>
+                
+                <div className="breakdown-item">
+                  <span>Renovation Cost:</span>
+                  <span className="negative">
+                    {formatCurrency(renovationConfirmation.cost)}
+                  </span>
+                </div>
+
+                <div className="breakdown-item">
+                  <span>Your Cash:</span>
+                  <span>{formatCurrency(game.player.cash)}</span>
+                </div>
+                
+                <div className="breakdown-item">
+                  <span>Current Value:</span>
+                  <span>{formatCurrency(calculatePropertyValue(renovationConfirmation.property))}</span>
+                </div>
+                
+                <div className="breakdown-item">
+                  <span>Value After Renovation:</span>
+                  <span className="positive">{formatCurrency(calculatePropertyValue({
+                    ...renovationConfirmation.property,
+                    condition: renovationConfirmation.property.condition + 1
+                  }))}</span>
+                </div>
+                
+                <div className="breakdown-item">
+                  <span>Value Increase:</span>
+                  <span className="highlight">{formatCurrency(
+                    calculatePropertyValue({
+                      ...renovationConfirmation.property,
+                      condition: renovationConfirmation.property.condition + 1
+                    }) - calculatePropertyValue(renovationConfirmation.property)
+                  )}</span>
+                </div>
+
+                {/* Add rental income section */}
+                <div className="breakdown-item rental-note">
+                  <span>Current Monthly Rent:</span>
+                  <span>
+                    {renovationConfirmation.property.isRental 
+                      ? formatCurrency(renovationConfirmation.property.rentalIncome || 0)
+                      : formatCurrency(calculateEstimatedRent(renovationConfirmation.property) * 0.95)}
+                  </span>
+                </div>
+
+                <div className="breakdown-item rental-note">
+                  <span>Rent After Renovation:</span>
+                  <span className="positive">
+                    {formatCurrency(calculateEstimatedRent({
+                      ...renovationConfirmation.property,
+                      condition: renovationConfirmation.property.condition + 1
+                    }) * 0.95)}
+                  </span>
+                </div>
+
+                <div className="breakdown-item rental-note">
+                  <span>Monthly Rent Increase:</span>
+                  <span className="highlight">
+                    {formatCurrency(
+                      calculateEstimatedRent({
+                        ...renovationConfirmation.property,
+                        condition: renovationConfirmation.property.condition + 1
+                      }) * 0.95 - 
+                      (renovationConfirmation.property.isRental 
+                        ? (renovationConfirmation.property.rentalIncome || 0)
+                        : calculateEstimatedRent(renovationConfirmation.property) * 0.95)
+                    )}
+                  </span>
+                </div>
+
+                {/* Add annual return on investment */}
+                <div className="breakdown-item rental-note">
+                  <span>Return on Investment:</span>
+                  <span className="highlight">
+                    {(((calculateEstimatedRent({
+                      ...renovationConfirmation.property,
+                      condition: renovationConfirmation.property.condition + 1
+                    }) * 0.95 - 
+                    (renovationConfirmation.property.isRental 
+                      ? (renovationConfirmation.property.rentalIncome || 0)
+                      : calculateEstimatedRent(renovationConfirmation.property) * 0.95)) * 12 / 
+                    renovationConfirmation.cost) * 100).toFixed(1)}% per year
+                  </span>
+                </div>
+
+                {game.player.cash < renovationConfirmation.cost && (
+                  <div className="breakdown-item error-message">
+                    <span>Warning:</span>
+                    <span>Not enough cash for renovation!</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="confirmation-buttons">
+                <button 
+                  className="confirm-sale"
+                  onClick={handleRenovate}
+                  disabled={game.player.cash < renovationConfirmation.cost}
+                >
+                  Confirm Renovation
+                </button>
+                <button 
+                  className="cancel-sale"
+                  onClick={handleRenovateCancel}
                 >
                   Cancel
                 </button>
