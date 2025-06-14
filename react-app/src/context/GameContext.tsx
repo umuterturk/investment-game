@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { Game } from '../models/Game';
 import { GameState, NewsEvent } from '../models/types';
 
@@ -64,6 +64,13 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return newGame;
     });
 
+    const [refreshCounter, setRefreshCounter] = useState<number>(0);
+    
+    // Function to force UI refresh - moved up before its first use
+    const refreshUI = useCallback(() => {
+        setRefreshCounter(prev => prev + 1);
+    }, []);
+
     const updateGame = (newGame: Game) => {
         setGame(newGame);
         refreshUI();
@@ -74,7 +81,10 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
     const [modalContent, setModalContent] = useState<React.ReactNode>(null);
     const [modalTitle, setModalTitle] = useState<string>('');
-    const [refreshCounter, setRefreshCounter] = useState<number>(0);
+    const [previousCash, setPreviousCash] = useState<number>(0);
+    const [previousDay, setPreviousDay] = useState<number>(0);
+    const [previousMonth, setPreviousMonth] = useState<number>(0);
+    const [previousYear, setPreviousYear] = useState<number>(0);
 
     // Set up game update interval
     useEffect(() => {
@@ -89,7 +99,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
             
             return () => clearInterval(interval);
         }
-    }, [game, game.gameState, refreshCounter]);
+    }, [game, game.gameState, game.timePerDay, refreshUI, refreshCounter]);
     
     // Set up page unload handler
     useEffect(() => {
@@ -119,12 +129,32 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
             year: game.player.currentYear,
             cash: game.player.cash
         });
-    }, []);
+    }, [game, game.gameState, game.previousGameState, game.player.currentDay, 
+        game.player.currentMonth, game.player.currentYear, game.player.cash]);
 
-    // Function to force UI refresh
-    const refreshUI = () => {
-        setRefreshCounter(prev => prev + 1);
-    };
+    // Auto-save game state
+    useEffect(() => {
+        if (game.gameState !== game.previousGameState ||
+            game.player.cash !== previousCash ||
+            game.player.currentDay !== previousDay ||
+            game.player.currentMonth !== previousMonth ||
+            game.player.currentYear !== previousYear) {
+          
+          // Save game state to localStorage
+          const saveGameState = (gameToSave: Game) => {
+            localStorage.setItem('investmentGameSave', JSON.stringify(gameToSave));
+          };
+
+          saveGameState(game);
+          setPreviousCash(game.player.cash);
+          setPreviousDay(game.player.currentDay);
+          setPreviousMonth(game.player.currentMonth);
+          setPreviousYear(game.player.currentYear);
+          game.previousGameState = game.gameState;
+        }
+    }, [game, game.gameState, game.previousGameState, game.player.cash, game.player.currentDay, 
+        game.player.currentMonth, game.player.currentYear,
+        previousCash, previousDay, previousMonth, previousYear]);
 
     // Function to close modal and handle game state
     const closeModal = (resumeGame: boolean = true) => {

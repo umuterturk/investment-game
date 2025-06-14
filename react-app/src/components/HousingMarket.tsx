@@ -11,19 +11,18 @@ interface HousingMarketProps {
 export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
   const { game, updateGame } = useGameContext();
   const [selectedHouse, setSelectedHouse] = useState<Housing | null>(null);
-  const [showMortgageDetails, setShowMortgageDetails] = useState(false);
   const [downPaymentPercent, setDownPaymentPercent] = useState(20);
   const [expandedSection, setExpandedSection] = useState<'houses' | 'rentals' | 'owned' | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
   const [saleConfirmation, setSaleConfirmation] = useState<{property: Housing, index: number} | null>(null);
   const [renovationConfirmation, setRenovationConfirmation] = useState<{property: Housing, cost: number} | null>(null);
 
-  // Generate new listings when component mounts
+  // Generate new listings only when component mounts
   useEffect(() => {
+    // Only generate new listings when the component first mounts
     game.generateNewListings();
     updateGame(game);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Empty dependency array means this runs once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Intentionally empty to run only on mount
 
   const calculateMortgage = (house: Housing): number => {
     const principal = house.price * (1 - downPaymentPercent / 100);
@@ -124,7 +123,6 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
   };
 
   const handleRefresh = () => {
-    setRefreshKey(prev => prev + 1);
     setSelectedHouse(null);
     game.generateNewListings();
     updateGame(game);
@@ -209,7 +207,6 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
     
     // Calculate remaining balance using loan amortization formula
     const monthlyRate = (property.mortgageRate || 0) / 12;
-    const remainingPayments = totalPayments - monthsSincePurchase;
     
     return originalLoan * 
       (Math.pow(1 + monthlyRate, totalPayments) - Math.pow(1 + monthlyRate, monthsSincePurchase)) /
@@ -354,14 +351,6 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
     const conditionAdjustment = 1 + ((house.condition - 7) * 0.1);
     
     return Math.round(baseRent * sizeMultiplier * conditionAdjustment);
-  };
-
-  const calculateTransportCostChange = (house: Housing): number => {
-    const currentLocation = game.player.housing?.location || game.player.location;
-    const currentMultiplier = GAME_DATA.transportCostMultiplier[currentLocation];
-    const newMultiplier = GAME_DATA.transportCostMultiplier[house.location];
-    
-    return game.player.baseExpenses.transport * (newMultiplier - currentMultiplier);
   };
 
   const calculatePropertyValue = (property: Housing) => {

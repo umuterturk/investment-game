@@ -1,6 +1,6 @@
 import { Player } from './Player';
 import { GameState, EventHistoryItem, NewsEvent, RandomEventEffect, Housing, HousingMarket } from './types';
-import { GAME_DATA, Region } from '../data/gameData';
+import { GAME_DATA } from '../data/gameData';
 import { NEWS_EVENTS } from '../data/newsData';
 
 interface GameNotification {
