@@ -17,6 +17,7 @@ interface GameContextType {
     modalTitle: string;
     setModalTitle: (title: string) => void;
     refreshUI: () => void;
+    forceUpdate: () => void;
 }
 
 const GameContext = createContext<GameContextType | undefined>(undefined);
@@ -70,6 +71,18 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const refreshUI = useCallback(() => {
         setRefreshCounter(prev => prev + 1);
     }, []);
+
+    // Function to force a complete update by recreating the game object
+    const forceUpdate = useCallback(() => {
+        setGame(prevGame => {
+            // Create a new game object reference to trigger React's state update
+            const updatedGame = new Game();
+            // Copy all properties from the previous game
+            Object.assign(updatedGame, prevGame);
+            return updatedGame;
+        });
+        refreshUI();
+    }, [refreshUI]);
 
     const updateGame = (newGame: Game) => {
         setGame(newGame);
@@ -142,7 +155,17 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
           
           // Save game state to localStorage
           const saveGameState = (gameToSave: Game) => {
-            localStorage.setItem('investmentGameSave', JSON.stringify(gameToSave));
+            console.log("Auto-saving game state, difficulty:", gameToSave.difficulty);
+            const gameState = {
+                gameState: gameToSave.gameState,
+                player: gameToSave.player,
+                notifications: gameToSave.notifications,
+                eventHistory: gameToSave.eventHistory,
+                shownNews: gameToSave.shownNews,
+                saveDate: new Date().toLocaleString(),
+                difficulty: gameToSave.difficulty // Include difficulty in autosave
+            };
+            localStorage.setItem('investmentGameSave', JSON.stringify(gameState));
           };
 
           saveGameState(game);
@@ -183,7 +206,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setModalContent,
             modalTitle,
             setModalTitle,
-            refreshUI
+            refreshUI,
+            forceUpdate
         }}>
             {children}
         </GameContext.Provider>

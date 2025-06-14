@@ -2,6 +2,7 @@ import { Player } from './Player';
 import { GameState, EventHistoryItem, NewsEvent, RandomEventEffect, Housing, HousingMarket } from './types';
 import { GAME_DATA } from '../data/gameData';
 import { NEWS_EVENTS } from '../data/newsData';
+import { GameDifficulty } from '../components/WelcomeScreen';
 
 interface GameNotification {
     message: string;
@@ -21,6 +22,7 @@ export class Game {
     savedGames: { name: string, date: string, data: string }[];
     housingMarket: HousingMarket;
     private _lastHappiness: number = 70;
+    difficulty: GameDifficulty | null = null;
 
     constructor() {
         console.log("Creating new Game instance");
@@ -458,7 +460,8 @@ export class Game {
             notifications: this.notifications,
             eventHistory: this.eventHistory,
             shownNews: this.shownNews,
-            saveDate: new Date().toLocaleString()
+            saveDate: new Date().toLocaleString(),
+            difficulty: this.difficulty
         };
         
         try {
@@ -829,7 +832,7 @@ export class Game {
     }
 
     // Insurance methods
-    buyInsurance(type: keyof typeof this.player.insurance, cost: number): boolean {
+    buyInsurance(type: keyof Player['insurance'], cost: number): boolean {
         // Check if player has enough cash
         if (this.player.cash < cost) {
             this.addNotification(`You don't have enough cash to buy ${type} insurance.`);
@@ -848,7 +851,7 @@ export class Game {
         return true;
     }
 
-    cancelInsurance(type: keyof typeof this.player.insurance): void {
+    cancelInsurance(type: keyof Player['insurance']): void {
         // Set insurance status
         this.player.insurance[type] = false;
         
@@ -933,68 +936,25 @@ export class Game {
 
     // Save game with name
     saveGameAs(name: string): void {
-        console.log(`Saving game as: ${name}`);
-        
-        // Ensure player data is up to date
-        this.player.updateRent();
-        this.player.adjustExpensesForInflation();
-        
-        // Add save date to game data
-        const gameData = {
-            player: {
-                // Core properties
-                age: this.player.age,
-                cash: this.player.cash,
-                savings: this.player.savings,
-                currentDay: this.player.currentDay,
-                currentMonth: this.player.currentMonth,
-                currentYear: this.player.currentYear,
-                monthlyIncome: this.player.monthlyIncome,
-                married: this.player.married,
-                children: this.player.children,
-                jobLossMonths: this.player.jobLossMonths,
-                location: this.player.location,
-                
-                // Complex properties
-                stocks: this.player.stocks,
-                properties: this.player.properties,
-                loans: this.player.loans,
-                car: this.player.car,
-                insurance: this.player.insurance,
-                capitalGains: this.player.capitalGains,
-                baseExpenses: this.player.baseExpenses,
-                monthlyExpenses: this.player.monthlyExpenses,
-                housing: this.player.housing,
-                monthlyHousingPayment: this.player.monthlyHousingPayment,
-                
-                // Price history
-                lastMonthPrices: this.player.lastMonthPrices,
-                currentMonthPrices: this.player.currentMonthPrices,
-                dailyVolatility: this.player.dailyVolatility
-            },
+        // Create a copy of the game state to save
+        const gameState = {
             gameState: this.gameState,
-            previousGameState: this.previousGameState,
+            player: this.player,
             notifications: this.notifications,
             eventHistory: this.eventHistory,
             shownNews: this.shownNews,
-            saveDate: new Date().toLocaleString()
+            saveDate: new Date().toLocaleString(),
+            difficulty: this.difficulty // Save difficulty
         };
         
-        // Save to localStorage with name
-        try {
-            localStorage.setItem(`investmentGameSave_${name}`, JSON.stringify(gameData));
-            console.log(`Game saved successfully as ${name}:`, {
-                day: this.player.currentDay,
-                month: this.player.currentMonth,
-                year: this.player.currentYear,
-                cash: this.player.cash
-            });
-        } catch (error) {
-            console.error(`Error saving game as ${name}:`, error);
-        }
+        // Save to localStorage
+        localStorage.setItem(`investmentGameSave_${name}`, JSON.stringify(gameState));
         
         // Update saved games list
         this.savedGames = this.getSavedGames();
+        
+        // Add notification
+        this.addNotification(`Game saved as "${name}"`);
     }
 
     // Load specific saved game
@@ -1019,61 +979,77 @@ export class Game {
             console.log("Save data parsed:", { 
                 gameState: gameData.gameState,
                 playerData: gameData.player ? "exists" : "missing",
-                cash: gameData.player?.cash
+                cash: gameData.player?.cash,
+                currentDay: gameData.player?.currentDay,
+                currentMonth: gameData.player?.currentMonth,
+                currentYear: gameData.player?.currentYear,
+                difficulty: gameData.difficulty
             });
             
-            // Create a new player instance to avoid reference issues
-            this.player = new Player();
-            
-            // Restore player data with proper type handling
+            // Restore difficulty first - CRITICAL for UI to show game screen
+            if (gameData.difficulty) {
+                console.log("Restoring difficulty:", gameData.difficulty);
+                this.difficulty = gameData.difficulty;
+            } else {
+                console.warn("No difficulty found in saved game, setting to 'medium'");
+                this.difficulty = 'medium'; // Default to medium if not found
+            }
+
+            // Restore player data
             if (gameData.player) {
                 console.log("Restoring player data...");
-                // Handle primitive properties
-                this.player.age = gameData.player.age ?? this.player.age;
-                this.player.cash = gameData.player.cash ?? this.player.cash;
-                this.player.savings = gameData.player.savings ?? this.player.savings;
-                this.player.currentDay = gameData.player.currentDay ?? this.player.currentDay;
-                this.player.currentMonth = gameData.player.currentMonth ?? this.player.currentMonth;
-                this.player.currentYear = gameData.player.currentYear ?? this.player.currentYear;
-                this.player.monthlyIncome = gameData.player.monthlyIncome ?? this.player.monthlyIncome;
-                this.player.married = gameData.player.married ?? this.player.married;
-                this.player.children = gameData.player.children ?? this.player.children;
-                this.player.jobLossMonths = gameData.player.jobLossMonths ?? 0;
-                this.player.location = gameData.player.location ?? this.player.location;
                 
-                // Handle complex properties
-                if (gameData.player.monthlyExpenses) {
-                    this.player.monthlyExpenses = {...this.player.monthlyExpenses, ...gameData.player.monthlyExpenses};
-                }
+                // Create a new player with the correct starting values based on difficulty
+                // but don't initialize with default values
+                this.player = new Player({
+                    startingCash: gameData.player.cash || 0,
+                    baseSalary: gameData.player.monthlyIncome || 3000
+                });
                 
-                if (gameData.player.stocks) {
-                    this.player.stocks = {...gameData.player.stocks};
-                }
+                // Now restore all player properties from saved data
+                this.player.cash = gameData.player.cash || 0;
+                this.player.age = gameData.player.age || 25;
+                this.player.currentYear = gameData.player.currentYear || 2005;
+                this.player.currentMonth = gameData.player.currentMonth || 1;
+                this.player.currentDay = gameData.player.currentDay || 1;
                 
-                if (gameData.player.properties) {
-                    this.player.properties = [...gameData.player.properties];
-                }
+                // Restore complex properties
+                this.player.stocks = gameData.player.stocks || {};
+                this.player.properties = gameData.player.properties || [];
+                this.player.savings = gameData.player.savings || 0;
+                this.player.loans = gameData.player.loans || [];
+                this.player.married = gameData.player.married || false;
+                this.player.children = gameData.player.children || 0;
+                this.player.jobLossMonths = gameData.player.jobLossMonths || 0;
+                this.player.location = gameData.player.location || 'London';
+                this.player.workLocation = gameData.player.workLocation || 'London';
+                this.player.monthlyIncome = gameData.player.monthlyIncome || 3000;
                 
-                if (gameData.player.loans) {
-                    this.player.loans = [...gameData.player.loans];
-                }
-                
+                // Restore car if exists
                 if (gameData.player.car) {
                     this.player.car = {...gameData.player.car};
                 }
                 
+                // Restore insurance
                 if (gameData.player.insurance) {
-                    this.player.insurance = {...this.player.insurance, ...gameData.player.insurance};
+                    this.player.insurance = {...gameData.player.insurance};
                 }
                 
+                // Restore capital gains
                 if (gameData.player.capitalGains) {
-                    this.player.capitalGains = {...this.player.capitalGains, ...gameData.player.capitalGains};
+                    this.player.capitalGains = {...gameData.player.capitalGains};
                 }
                 
+                // Restore expenses
                 if (gameData.player.baseExpenses) {
-                    this.player.baseExpenses = {...this.player.baseExpenses, ...gameData.player.baseExpenses};
+                    this.player.baseExpenses = {...gameData.player.baseExpenses};
                 }
                 
+                if (gameData.player.monthlyExpenses) {
+                    this.player.monthlyExpenses = {...gameData.player.monthlyExpenses};
+                }
+                
+                // Restore housing
                 if (gameData.player.housing) {
                     this.player.housing = gameData.player.housing;
                 }
@@ -1082,7 +1058,7 @@ export class Game {
                     this.player.monthlyHousingPayment = gameData.player.monthlyHousingPayment;
                 }
                 
-                // Restore price history if available
+                // Restore price history
                 if (gameData.player.lastMonthPrices) {
                     this.player.lastMonthPrices = {...gameData.player.lastMonthPrices};
                 }
@@ -1095,6 +1071,18 @@ export class Game {
                 if (gameData.player.dailyVolatility) {
                     this.player.dailyVolatility = gameData.player.dailyVolatility;
                 }
+                
+                // Restore happiness
+                if (gameData.player.happiness) {
+                    this.player.happiness = {...gameData.player.happiness};
+                }
+                
+                console.log("Player data restored:", {
+                    cash: this.player.cash,
+                    currentDay: this.player.currentDay,
+                    currentMonth: this.player.currentMonth,
+                    currentYear: this.player.currentYear
+                });
             }
             
             // Restore game state
@@ -1196,7 +1184,8 @@ export class Game {
             notifications: this.notifications,
             eventHistory: this.eventHistory,
             shownNews: this.shownNews,
-            saveDate: new Date().toLocaleString()
+            saveDate: new Date().toLocaleString(),
+            difficulty: this.difficulty
         };
         
         // Save to localStorage
@@ -1581,5 +1570,21 @@ export class Game {
     private processYearEnd(): void {
         // Implement year-end processing logic
         console.log("Processing year-end...");
+    }
+
+    setDifficulty(difficultyOption: { name: GameDifficulty; startingCash: number; baseSalary: number }): void {
+        this.difficulty = difficultyOption.name;
+        
+        // Create a new player with the selected difficulty settings
+        this.player = new Player({
+            startingCash: difficultyOption.startingCash,
+            baseSalary: difficultyOption.baseSalary
+        });
+        
+        // Start the game
+        this.setGameState(GameState.PAUSED);
+        
+        // Add notification about difficulty selection
+        this.addNotification(`Game started in ${difficultyOption.name} mode.`);
     }
 } 

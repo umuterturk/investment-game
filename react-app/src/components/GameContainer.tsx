@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { Navigate } from 'react-router-dom';
 import GameHeader from './GameHeader';
 import ActionPanel from './ActionPanel';
 import Notifications from './Notifications';
@@ -9,7 +10,14 @@ import '../styles/GameContainer.css';
 
 export const GameContainer: React.FC = () => {
     const { game, isModalOpen, modalContent, modalTitle, closeModal } = useGameContext();
+    
+    // Redirect to welcome screen if no difficulty is set
+    if (!game.difficulty) {
+        console.log("No difficulty set, redirecting to welcome screen");
+        return <Navigate to="/" />;
+    }
 
+    console.log("Rendering GameContainer with difficulty:", game.difficulty);
     return (
         <div className="game-container">
             <GameHeader />
@@ -67,7 +75,10 @@ export const GameContainer: React.FC = () => {
             </div>
             
             {isModalOpen && (
-                <Modal onClose={closeModal} title={modalTitle}>
+                <Modal
+                    onClose={closeModal}
+                    title={modalTitle}
+                >
                     {modalContent}
                 </Modal>
             )}

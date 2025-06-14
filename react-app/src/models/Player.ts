@@ -1,6 +1,11 @@
 import { Player as PlayerType, MonthlyExpenses, CapitalGains, Housing } from './types';
 import { GAME_DATA, Region } from '../data/gameData';
 
+interface PlayerConfig {
+    startingCash: number;
+    baseSalary: number;
+}
+
 interface HappinessFactors {
     financial: number;
     living: number;
@@ -10,7 +15,7 @@ interface HappinessFactors {
 }
 
 interface HappinessModifiers {
-    shortTerm: { value: number; expiry: number; }[];
+    shortTerm: { value: number; expiry: number }[];
     seasonal: number;
     location: number;
 }
@@ -79,9 +84,10 @@ export class Player implements PlayerType {
         factors: HappinessFactors;
         modifiers: HappinessModifiers;
     };
+    private baseSalary: number;
 
-    constructor(name?: string) {
-        this.cash = GAME_DATA.config.startingCash;
+    constructor(config?: PlayerConfig) {
+        this.cash = config?.startingCash ?? GAME_DATA.config.startingCash;
         this.age = GAME_DATA.config.startAge;
         this.currentYear = GAME_DATA.config.startYear;
         this.currentMonth = GAME_DATA.config.startMonth;
@@ -110,7 +116,7 @@ export class Player implements PlayerType {
         this.baseExpenses = {
             utilities: 200,
             food: 300,
-            transport: 100,  // Reduced from 150 to 100 as base cost
+            transport: 100,
             entertainment: 200,
             other: 100
         };
@@ -118,24 +124,26 @@ export class Player implements PlayerType {
         this.monthlyExpenses = { 
             utilities: 200,
             food: 300,
-            transport: 100,  // Reduced from 150 to 100 as base cost
+            transport: 100,
             entertainment: 200,
             other: 100,
             rent: 0 
         };
         
+        // Store base salary for future calculations
+        this.baseSalary = config?.baseSalary ?? 3000;
         this.monthlyIncome = this.calculateMonthlyIncome();
+        
         this.jobLossMonths = 0;
         this.children = 0;
         this.lastMonthPrices = {};
         this.currentMonthPrices = {};
-        this.dailyVolatility = 0.002; // 0.2% daily volatility for stocks
+        this.dailyVolatility = 0.002;
         
-        // Capital gains tracking
         this.capitalGains = {
-            currentTaxYear: 0,  // Realized gains in current tax year
-            allowanceUsed: 0,   // How much of the tax-free allowance has been used
-            taxPaid: 0          // Tax paid on gains this year
+            currentTaxYear: 0,
+            allowanceUsed: 0,
+            taxPaid: 0
         };
         
         // Initialize stock prices
@@ -150,12 +158,11 @@ export class Player implements PlayerType {
             location: this.location,
             price: 0,
             monthlyPayment: baseRent,
-            size: 50, // 50m² for a one-bedroom flat
-            condition: 7, // decent condition
+            size: 50,
+            condition: 7,
             appreciationRate: 0
         };
         
-        // Set monthly housing payment and update rent
         this.monthlyHousingPayment = baseRent;
         this.monthlyExpenses.rent = baseRent;
 
@@ -164,7 +171,7 @@ export class Player implements PlayerType {
 
         // Initialize happiness
         this.happiness = {
-            total: 70, // Start with neutral-positive happiness
+            total: 70,
             factors: {
                 financial: 70,
                 living: 70,
@@ -209,15 +216,12 @@ export class Player implements PlayerType {
 
     calculateMonthlyIncome(): number {
         // Base income adjusted for inflation
-        const baseIncome = 3000; // Starting salary in 2005
         const currentYear = this.currentYear;
         const yearsSince2005 = currentYear - 2005;
-        const inflationAdjustedIncome = baseIncome * Math.pow(1.02, yearsSince2005); // 2% annual increase
+        const inflationAdjustedIncome = this.baseSalary * Math.pow(1.02, yearsSince2005);
 
         // Career progression bonus (3% per year of experience)
         const experienceBonus = inflationAdjustedIncome * (yearsSince2005 * 0.03);
-
-        // Education and skills bonuses would go here
 
         // Calculate rental income from properties
         let rentalIncome = 0;
@@ -805,5 +809,10 @@ export class Player implements PlayerType {
 }
 
 export const createPlayer = (name: string): Player => {
-    return new Player(name);
+    // Create default config with medium difficulty settings
+    const defaultConfig: PlayerConfig = {
+        startingCash: 15000, // Medium difficulty default
+        baseSalary: 3000     // Medium difficulty default
+    };
+    return new Player(defaultConfig);
 }; 

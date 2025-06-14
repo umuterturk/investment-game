@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useGameContext } from '../context/GameContext';
 import { GameState } from '../models/types';
 import { GAME_DATA } from '../data/gameData';
@@ -6,6 +7,7 @@ import '../styles/GameHeader.css';
 
 const GameHeader: React.FC = () => {
     const { game, setModalContent, setModalTitle, setIsModalOpen, closeModal, refreshUI } = useGameContext();
+    const navigate = useNavigate();
 
     // Format currency for display
     const formatCurrency = (amount: number): string => {
@@ -396,9 +398,15 @@ const GameHeader: React.FC = () => {
                         <span className="material-icons">settings</span>
                         <span>Game Settings</span>
                     </button>
-                    <button className="menu-btn" onClick={handleHelp}>
-                        <span className="material-icons">help</span>
-                        <span>Help</span>
+                    <button className="menu-btn" onClick={() => {
+                        game.restartGame();
+                        game.difficulty = null; // Reset difficulty to trigger welcome screen
+                        closeModal(false);
+                        addNotification("Returned to main menu");
+                        navigate('/'); // Navigate to welcome screen
+                    }}>
+                        <span className="material-icons">exit_to_app</span>
+                        <span>Exit to Main Menu</span>
                     </button>
                     {game.previousGameState && game.previousGameState !== GameState.PAUSED && (
                         <button className="menu-btn resume-btn" onClick={handleResumeGame}>

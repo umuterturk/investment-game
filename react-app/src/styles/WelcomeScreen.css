@@ -1,0 +1,376 @@
+.welcome-screen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    width: 100%;
+    max-width: 100%;
+    padding: 1rem;
+    background-color: #282c34;
+    color: #e0e0e0;
+    box-sizing: border-box;
+    overflow-x: hidden;
+}
+
+.welcome-content {
+    background-color: #333;
+    border-radius: 5px;
+    padding: 2rem;
+    width: 100%;
+    max-width: 600px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.welcome-screen h1 {
+    font-size: clamp(1.8rem, 5vw, 2.5rem);
+    margin-bottom: 1rem;
+    color: #4ecca3;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    text-align: center;
+}
+
+.intro-text {
+    font-size: clamp(1.2rem, 2.5vw, 1rem);
+    margin-bottom: 2rem;
+    color: #aaa;
+    text-align: center;
+    max-width: 600px;
+    line-height: 1.5;
+}
+
+.choose-difficulty {
+    font-size: clamp(1.2rem, 2.5vw, 1rem);
+    color: #aaa;
+    text-align: center;
+}
+
+.difficulty-buttons {
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    gap: 1.5rem;
+    width: 100%;
+    max-width: 600px;
+}
+
+.difficulty-button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background-color: #3a3a3a;
+    border: none;
+    border-radius: 5px;
+    padding: 1rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    width: 120px;
+    height: 120px;
+    color: #e0e0e0;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+    aspect-ratio: 1/1;
+}
+
+.difficulty-button:hover,
+.difficulty-button:active {
+    transform: translateY(-3px);
+    background-color: #444;
+}
+
+.difficulty-button .material-icons {
+    font-size: 2.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.difficulty-button span:not(.material-icons) {
+    font-size: 0.9rem;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* Easy button specific styling */
+.difficulty-button:nth-child(1) {
+    border-top: 3px solid #ffd700;
+}
+
+.difficulty-button:nth-child(1) .material-icons {
+    color: #ffd700;
+}
+
+/* Medium button specific styling */
+.difficulty-button:nth-child(2) {
+    border-top: 3px solid #c0c0c0;
+}
+
+.difficulty-button:nth-child(2) .material-icons {
+    color: #c0c0c0;
+}
+
+/* Hard button specific styling */
+.difficulty-button:nth-child(3) {
+    border-top: 3px solid #cd7f32;
+}
+
+.difficulty-button:nth-child(3) .material-icons {
+    color: #cd7f32;
+}
+
+/* Modal Content Styles */
+.difficulty-modal-content {
+    padding: 1rem;
+}
+
+.modal-icon {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 1.5rem;
+}
+
+.modal-icon .material-icons {
+    font-size: 4rem;
+}
+
+/* Style icons based on difficulty */
+.modal-icon .material-icons[data-difficulty="easy"] {
+    color: #ffd700;
+}
+
+.modal-icon .material-icons[data-difficulty="medium"] {
+    color: #c0c0c0;
+}
+
+.modal-icon .material-icons[data-difficulty="hard"] {
+    color: #cd7f32;
+}
+
+.brutal-intro {
+    font-size: 1.1rem;
+    line-height: 1.5;
+    margin-bottom: 1.5rem;
+    padding: 15px;
+    background-color: #222;
+    border-left: 4px solid #4ecca3;
+    color: #fff;
+    font-weight: 500;
+}
+
+.difficulty-details {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 1.5rem;
+    background-color: #2a2a2a;
+    padding: 15px;
+    border-radius: 5px;
+}
+
+.detail-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.detail-item .material-icons {
+    color: #4ecca3;
+}
+
+.difficulty-description {
+    margin-bottom: 2rem;
+    line-height: 1.5;
+    color: #bbb;
+}
+
+.start-game-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    background-color: #4ecca3;
+    color: #222;
+    border: none;
+    border-radius: 5px;
+    padding: 12px 20px;
+    font-size: 1.1rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    width: 100%;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    box-shadow: 0 4px 0 #2d7a5e;
+}
+
+.start-game-button:hover {
+    background-color: #5fddb4;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 0 #2d7a5e;
+}
+
+.start-game-button:active {
+    transform: translateY(2px);
+    box-shadow: 0 2px 0 #2d7a5e;
+}
+
+/* Mobile-specific adjustments */
+@media screen and (max-width: 600px) {
+    .welcome-content {
+        padding: 1.5rem 1rem;
+    }
+
+    .difficulty-buttons {
+        /* flex-direction: column; */ /* Commented out to keep buttons in a row */
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .difficulty-button {
+        width: 30%; /* Changed from 100% to 30% */
+        max-width: 200px;
+        height: auto;
+        aspect-ratio: 1/1;
+    }
+    
+    .brutal-intro {
+        font-size: 1rem;
+        padding: 10px;
+    }
+    
+    .start-game-button {
+        padding: 10px;
+        font-size: 1rem;
+    }
+}
+
+.game-actions {
+    margin-top: 30px;
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+}
+
+.action-button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background-color: #3a3a3a;
+    border: none;
+    color: #e0e0e0;
+    padding: 15px 25px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.2s;
+    min-width: 150px;
+}
+
+.action-button:hover {
+    background-color: #4a4a4a;
+    transform: translateY(-2px);
+}
+
+.action-button .material-icons {
+    font-size: 24px;
+    margin-bottom: 8px;
+}
+
+.action-button span:not(.material-icons) {
+    font-size: 16px;
+    font-weight: 500;
+}
+
+.resume-button {
+    background-color: #2980b9;
+}
+
+.resume-button:hover {
+    background-color: #3498db;
+}
+
+.load-button {
+    background-color: #27ae60;
+}
+
+.load-button:hover {
+    background-color: #2ecc71;
+}
+
+/* Load Game Modal Styles */
+.load-game-modal-content {
+    padding: 20px;
+}
+
+.saved-games-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.saved-game-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: #3a3a3a;
+    padding: 15px;
+    border-radius: 5px;
+}
+
+.save-info {
+    flex-grow: 1;
+}
+
+.save-name {
+    font-size: 18px;
+    font-weight: 500;
+    margin-bottom: 5px;
+}
+
+.save-date {
+    font-size: 14px;
+    color: #888;
+}
+
+.save-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.save-action-btn {
+    background: none;
+    border: none;
+    color: #e0e0e0;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.save-action-btn:hover {
+    background-color: #4a4a4a;
+}
+
+.save-action-btn.load-btn {
+    color: #2ecc71;
+}
+
+.save-action-btn.delete-btn {
+    color: #e74c3c;
+}
+
+@media (max-width: 768px) {
+    .game-actions {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .action-button {
+        width: 100%;
+        max-width: 300px;
+    }
+}
