@@ -310,64 +310,11 @@ const GameHeader: React.FC = () => {
         );
     };
 
-    // Show help information
-    const handleHelp = (): void => {
-        setModalTitle('Game Help');
-        setModalContent(
-            <div className="help-modal">
-                <h3>Game Controls</h3>
-                <ul>
-                    <li><strong>Pause:</strong> Pause the game</li>
-                    <li><strong>Play:</strong> Run the game at normal speed</li>
-                    <li><strong>Fast Forward:</strong> Run the game at 3x speed</li>
-                </ul>
-                
-                <h3>Game Stats</h3>
-                <ul>
-                    <li><strong>Cash:</strong> Your liquid money</li>
-                    <li><strong>Net Worth:</strong> Total value of all your assets</li>
-                    <li><strong>Income:</strong> Monthly net income</li>
-                </ul>
-                
-                <h3>Actions</h3>
-                <ul>
-                    <li><strong>Stocks:</strong> Buy and sell stocks</li>
-                    <li><strong>Property:</strong> Buy and sell properties</li>
-                    <li><strong>Savings:</strong> Manage your savings account</li>
-                    <li><strong>Housing:</strong> Manage your housing situation</li>
-                    <li><strong>Marriage:</strong> Get married for financial benefits</li>
-                    <li><strong>Car:</strong> Buy and sell vehicles</li>
-                    <li><strong>Loans:</strong> Take out loans when needed</li>
-                </ul>
-                
-                <button 
-                    className="menu-btn" 
-                    onClick={handleMenu}
-                    style={{ marginTop: '20px' }}
-                >
-                    Back to Menu
-                </button>
-            </div>
-        );
-    };
 
     // Helper function to add notifications
     const addNotification = (message: string): void => {
         game.addNotification(message);
         refreshUI();
-    };
-
-    // Resume the previous game state
-    const handleResumeGame = (): void => {
-        if (game.previousGameState && game.previousGameState !== GameState.PAUSED) {
-            game.setGameState(game.previousGameState);
-            game.previousGameState = null;
-            closeModal();
-            addNotification("Game resumed from previous state.");
-        } else {
-            addNotification("No previous game state to resume.");
-            closeModal();
-        }
     };
 
     const handleMenu = (): void => {
@@ -408,12 +355,6 @@ const GameHeader: React.FC = () => {
                         <span className="material-icons">exit_to_app</span>
                         <span>Exit to Main Menu</span>
                     </button>
-                    {game.previousGameState && game.previousGameState !== GameState.PAUSED && (
-                        <button className="menu-btn resume-btn" onClick={handleResumeGame}>
-                            <span className="material-icons">restore</span>
-                            <span>Resume Previous State</span>
-                        </button>
-                    )}
                 </div>
             </div>
         );
