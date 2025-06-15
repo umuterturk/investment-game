@@ -32,7 +32,7 @@ const difficultyOptions: DifficultyOption[] = [
         icon: 'home',
         startingCash: 4500,
         baseSalary: 2100,
-        description: "The average Joe experience. Start with £15,000 in savings and a decent £3,000 monthly salary. You've got enough to get started, but not enough to get careless.",
+        description: "The average Joe experience. Start with £4,500 in savings and a decent £2,100 monthly salary. You've got enough to get started, but not enough to get careless.",
         brutalIntro: "Welcome to the middle class treadmill! You're not poor enough to qualify for help, but not rich enough to stop worrying about bills. The classic 'too much month at the end of the money' experience awaits!"
     },
     {
@@ -41,7 +41,7 @@ const difficultyOptions: DifficultyOption[] = [
         icon: 'construction',
         startingCash: 1500,
         baseSalary: 1350,
-        description: "The self-made challenge. Begin with just £5,000 and a modest £2,000 monthly salary. Every investment decision counts when you're starting from the bottom.",
+        description: "The self-made challenge. Begin with just £1,500 and a modest £1,350 monthly salary. Every investment decision counts when you're starting from the bottom.",
         brutalIntro: "Hard mode activated! You're starting with pocket change and a paycheck that vanishes faster than free food at an office party. Hope you enjoy eating ramen while your rich friends post vacation pics!"
     }
 ];

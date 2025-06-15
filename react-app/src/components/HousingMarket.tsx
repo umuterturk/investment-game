@@ -83,28 +83,90 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
     onClose();
   };
 
-  const handleRentHouse = (house: Housing): void => {
-    const securityDeposit = house.monthlyPayment * 3;
-    if (game.player.cash < securityDeposit) {
-      alert(`You need ${formatCurrency(securityDeposit)} (3 months rent) as security deposit!`);
-      return;
+  // Helper function to handle security deposit refund
+  const handleSecurityDepositRefund = (oldProperty: Housing | null): void => {
+    if (oldProperty?.type === 'RENT' && oldProperty.securityDeposit && oldProperty.rentalStartDate) {
+      // Check if the contract has been active for at least a year
+      const contractStartYear = oldProperty.rentalStartDate.year;
+      const contractStartMonth = oldProperty.rentalStartDate.month;
+      const currentYear = game.player.currentYear;
+      const currentMonth = game.player.currentMonth;
+      
+      // Calculate total months since contract start
+      const monthsSinceStart = (currentYear - contractStartYear) * 12 + (currentMonth - contractStartMonth);
+      
+      console.log('Contract duration (months):', monthsSinceStart);
+      
+      if (monthsSinceStart < 12) {
+        // Contract ended early, no refund
+        game.addNotification(`No security deposit refund as you're breaking the 1-year rental contract early.`);
+        console.log('No refund - contract ended early');
+        return;
+      }
+      
+      // Contract completed, provide refund with wear and tear deduction
+      const wearAndTearLoss = 0.1; // 10% loss for wear and tear
+      const refundAmount = oldProperty.securityDeposit * (1 - wearAndTearLoss);
+      
+      console.log('Processing security deposit refund:');
+      console.log('Original deposit:', oldProperty.securityDeposit);
+      console.log('Refund amount:', refundAmount);
+      
+      game.player.cash += refundAmount;
+      game.addNotification(`Received security deposit refund of ${formatCurrency(refundAmount)} (10% deducted for wear and tear)`);
     }
+  };
 
-    const newHouse: Housing = {
-      ...house,
-      type: 'RENT',
-    };
+  // Helper function to handle security deposit payment
+  const handleSecurityDepositPayment = (property: Housing): Housing | null => {
+    if (property.type === 'RENT') {
+      const securityDeposit = property.monthlyPayment * 3;
+      if (game.player.cash < securityDeposit) {
+        alert(`You need ${formatCurrency(securityDeposit)} (3 months rent) as security deposit!`);
+        return null;
+      }
+      
+      console.log('Paying security deposit for new rental:', securityDeposit);
+      game.player.cash -= securityDeposit;
+      
+      const updatedProperty = {
+        ...property,
+        securityDeposit: securityDeposit,
+        rentalStartDate: {
+          year: game.player.currentYear,
+          month: game.player.currentMonth
+        }
+      };
+      
+      // Update the property in the housing market listings if it exists there
+      const rentalIndex = game.housingMarket.rentals.findIndex(h => h.id === property.id);
+      if (rentalIndex !== -1) {
+        game.housingMarket.rentals[rentalIndex] = updatedProperty;
+      }
+      
+      return updatedProperty;
+    }
+    
+    return property;
+  };
 
-    game.player.cash -= securityDeposit;
-    game.player.housing = newHouse;
-    game.player.monthlyHousingPayment = house.monthlyPayment;
+  const handleRentHouse = (house: Housing): void => {
+    const updatedProperty = handleSecurityDepositPayment(house);
+    if (!updatedProperty) return; // If security deposit payment failed
+
+    const oldPrimaryResidence = game.player.housing;
+        // Refund security deposit from old rental property
+    handleSecurityDepositRefund(oldPrimaryResidence);
+    
+    game.player.housing = updatedProperty;
+    game.player.monthlyHousingPayment = updatedProperty.monthlyPayment;
     game.player.monthlyExpenses = {
       ...game.player.monthlyExpenses,
-      rent: house.monthlyPayment
+      rent: updatedProperty.monthlyPayment
     };
     game.player.updateTransportCosts();
 
-    game.addNotification(`Rented ${house.name} for ${formatCurrency(house.monthlyPayment)} per month`);
+    game.addNotification(`Rented ${updatedProperty.name} for ${formatCurrency(updatedProperty.monthlyPayment)} per month`);
     updateGame(game);
     onClose();
   };
@@ -132,12 +194,23 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
     // Store the current primary residence if it exists
     const oldPrimaryResidence = game.player.housing;
     
+    console.log('Moving out of:', oldPrimaryResidence);
+    console.log('Old residence type:', oldPrimaryResidence?.type);
+    console.log('Old residence security deposit:', oldPrimaryResidence?.securityDeposit);
+    
+    // Refund security deposit from old rental property
+    handleSecurityDepositRefund(oldPrimaryResidence);
+    
+    // Pay security deposit for new rental property
+    const updatedProperty = handleSecurityDepositPayment(property);
+    if (!updatedProperty) return; // If security deposit payment failed
+    
     // Set the selected property as the new primary residence
-    game.player.housing = property;
-    game.player.monthlyHousingPayment = property.monthlyPayment;
+    game.player.housing = updatedProperty;
+    game.player.monthlyHousingPayment = updatedProperty.monthlyPayment;
     game.player.monthlyExpenses = {
       ...game.player.monthlyExpenses,
-      rent: 0 // No rent when you own the property
+      rent: updatedProperty.type === 'RENT' ? updatedProperty.monthlyPayment : 0
     };
     game.player.updateTransportCosts();
 
@@ -149,7 +222,7 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
       }
     }
 
-    game.addNotification(`Moved into ${property.name}`);
+    game.addNotification(`Moved into ${updatedProperty.name}`);
     updateGame(game);
   };
 

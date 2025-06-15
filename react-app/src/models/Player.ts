@@ -87,7 +87,16 @@ export class Player implements PlayerType {
     private baseSalary: number;
 
     constructor(config?: PlayerConfig) {
-        this.cash = config?.startingCash ?? GAME_DATA.config.startingCash;
+        // Calculate initial security deposit
+        const baseRent = GAME_DATA.rentPrice[GAME_DATA.config.regions[0]][GAME_DATA.config.startYear];
+        const initialSecurityDeposit = baseRent * 3;
+
+        // Add security deposit to starting cash so after deduction we have the intended amount
+        const adjustedStartingCash = (config?.startingCash || 15000) + initialSecurityDeposit;
+        this.cash = adjustedStartingCash;
+        this.baseSalary = config?.baseSalary || 30000;
+        
+        // Initialize basic properties
         this.age = GAME_DATA.config.startAge;
         this.currentYear = GAME_DATA.config.startYear;
         this.currentMonth = GAME_DATA.config.startMonth;
@@ -105,52 +114,46 @@ export class Player implements PlayerType {
             contents: false
         };
         
-        // Choose a random location from available regions
-        const availableRegions = GAME_DATA.config.regions;
-        this.location = availableRegions[Math.floor(Math.random() * availableRegions.length)];
+        // Initialize location and work location
+        this.location = GAME_DATA.config.regions[0];
+        this.workLocation = this.location;
         
-        // Set work location to London
-        this.workLocation = 'London';
-        
-        // Base expenses in 2005 prices (excluding rent which is calculated separately)
+        // Initialize base expenses
         this.baseExpenses = {
-            utilities: 200,
-            food: 300,
-            transport: 100,
-            entertainment: 200,
+            utilities: 100,
+            food: 200,
+            transport: 150,
+            entertainment: 100,
             other: 100
         };
         
-        this.monthlyExpenses = { 
-            utilities: 200,
-            food: 300,
-            transport: 100,
-            entertainment: 200,
-            other: 100,
-            rent: 0 
+        // Initialize monthly expenses with base values
+        this.monthlyExpenses = {
+            ...this.baseExpenses,
+            rent: 0
         };
         
-        // Store base salary for future calculations
-        this.baseSalary = config?.baseSalary ?? 3000;
-        this.monthlyIncome = this.calculateMonthlyIncome();
-        
+        // Initialize monthly income
+        this.monthlyIncome = this.baseSalary / 12;
         this.jobLossMonths = 0;
         this.children = 0;
+        
+        // Initialize stock price tracking
         this.lastMonthPrices = {};
         this.currentMonthPrices = {};
-        this.dailyVolatility = 0.002;
+        this.dailyVolatility = 0.02;
         
+        // Initialize capital gains tracking
         this.capitalGains = {
             currentTaxYear: 0,
+            previousTaxYear: 0,
             allowanceUsed: 0,
             taxPaid: 0
         };
         
-        // Initialize stock prices
-        this.initializeStockPrices();
+        // Deduct security deposit from starting cash
+        this.cash -= initialSecurityDeposit;
         
-        // Initialize starting rental property
-        const baseRent = GAME_DATA.rentPrice[this.location][this.currentYear];
         this.housing = {
             id: `rental_${this.location}_start`,
             type: 'RENT',
@@ -160,7 +163,12 @@ export class Player implements PlayerType {
             monthlyPayment: baseRent,
             size: 50,
             condition: 7,
-            appreciationRate: 0
+            appreciationRate: 0,
+            securityDeposit: initialSecurityDeposit,
+            rentalStartDate: {
+                year: this.currentYear - 2,
+                month: 0  // January (0-based month indexing)
+            }
         };
         
         this.monthlyHousingPayment = baseRent;

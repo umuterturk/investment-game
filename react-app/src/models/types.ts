@@ -77,6 +77,7 @@ export interface MonthlyExpenses {
 // Capital Gains type
 export interface CapitalGains {
     currentTaxYear: number;
+    previousTaxYear: number;
     allowanceUsed: number;
     taxPaid: number;
 }
@@ -179,6 +180,11 @@ export interface Housing {
     isRental?: boolean;
     rentalIncome?: number;
     purchaseYear?: number;
+    securityDeposit?: number;
+    rentalStartDate?: {
+        year: number;
+        month: number;
+    };
 }
 
 export interface HousingMarket {
