@@ -3,10 +3,12 @@ import { GameState, EventHistoryItem, NewsEvent, RandomEventEffect, Housing, Hou
 import { GAME_DATA, getInterestRateForYearMonth } from '../data/gameData';
 import { NEWS_EVENTS } from '../data/newsData';
 import { GameDifficulty } from '../components/WelcomeScreen';
+import { calculateRent } from '../utils/housingUtils';
 
 interface GameNotification {
     message: string;
     timestamp: string;
+    type: 'positive' | 'negative' | 'neutral';
 }
 
 export class Game {
@@ -76,6 +78,7 @@ export class Game {
         // Process daily updates
         this.updatePrices();
         this.processDailyExpenses();
+        this.checkPropertyDeterioration();
         
         // Update happiness
         this.player.calculateHappiness();
@@ -89,6 +92,9 @@ export class Game {
             this.processLoans();
             this.processMonthlyExpenses();
             this.player.adjustExpensesForInflation();
+            
+            // Check for rent anniversaries
+            this.checkRentAnniversaries();
             
             // Check for news events
             this.checkForNews();
@@ -145,8 +151,26 @@ export class Game {
                 }
             }
             
-            // Process taxes at the start of the new tax year (April)
+            // Process taxes and salary increase at the start of the new tax year (April)
             if (this.player.currentMonth === 3 && this.player.currentDay === 1) {
+                // Process annual salary increase
+                const currentYearData = GAME_DATA.medianSalaries[this.player.currentYear];
+                const prevYearData = GAME_DATA.medianSalaries[this.player.currentYear - 1];
+
+                if (currentYearData && prevYearData) {
+                    const newSalary = this.player.getCurrentSalary() * currentYearData.increase_rate;
+                    this.player.updateSalary(newSalary);
+                    
+                    // Notify the player about the salary change
+                    const increasePercent = ((currentYearData.increase_rate - 1) * 100).toFixed(1);
+                    const changeType = currentYearData.increase_rate > 1 ? 'increased' : 'decreased';
+                    this.addNotification(
+                        `Annual salary review: Your salary has ${changeType} by ${Math.abs(Number(increasePercent))}% based on market conditions.`,
+                        currentYearData.increase_rate > 1 ? 'positive' : 'negative'
+                    );
+                }
+
+                // Process taxes
                 this.processCapitalGainsTax();
                 this.processRentalIncomeTax();
             }
@@ -167,7 +191,7 @@ export class Game {
         
         // Check if player is bankrupt
         if (this.player.cash < -10000) {
-            this.addNotification("You're deeply in debt! Consider taking out a loan or selling assets.");
+            this.addNotification("You're deeply in debt! Consider taking out a loan or selling assets.", 'negative');
         }
     }
 
@@ -175,7 +199,7 @@ export class Game {
         // Skip if player has job loss months remaining
         if (this.player.jobLossMonths > 0) {
             this.player.jobLossMonths--;
-            this.addNotification(`You're still unemployed. ${this.player.jobLossMonths} months remaining until you find a new job.`);
+            this.addNotification(`You're still unemployed. ${this.player.jobLossMonths} months remaining until you find a new job.`, 'neutral');
             return;
         }
         
@@ -229,7 +253,7 @@ export class Game {
         this.player.savings += interest;
         
         // Add notification
-        this.addNotification(`You earned £${interest.toFixed(2)} in savings interest.`);
+        this.addNotification(`You earned £${interest.toFixed(2)} in savings interest.`, 'positive');
     }
 
     processLoans(): void {
@@ -250,7 +274,7 @@ export class Game {
             
             // Check if loan is paid off
             if (loan.remainingAmount <= 0) {
-                this.addNotification(`You've paid off your ${loan.type} loan!`);
+                this.addNotification(`You've paid off your ${loan.type} loan!`, 'positive');
                 this.player.loans.splice(i, 1);
             }
         }
@@ -303,7 +327,7 @@ export class Game {
                 }
                 
                 // Add notification
-                this.addNotification(eventEffect.message);
+                this.addNotification(eventEffect.message, eventEffect.type);
                 
                 // Add to event history
                 this.eventHistory.push({
@@ -357,21 +381,21 @@ export class Game {
             this.player.capitalGains.taxPaid += taxDue;
             
             // Add notification
-            this.addNotification(`Paid £${taxDue.toFixed(2)} in capital gains tax for the tax year.`);
+            this.addNotification(`Paid £${taxDue.toFixed(2)} in capital gains tax for the tax year.`, 'positive');
             
             // Reset for new tax year
             this.player.capitalGains.currentTaxYear = 0;
             this.player.capitalGains.allowanceUsed = 0;
         } else if (this.player.capitalGains.currentTaxYear > 0) {
             // No tax due but there were gains
-            this.addNotification(`No capital gains tax due as your gains of £${this.player.capitalGains.currentTaxYear.toFixed(2)} are within the annual allowance.`);
+            this.addNotification(`No capital gains tax due as your gains of £${this.player.capitalGains.currentTaxYear.toFixed(2)} are within the annual allowance.`, 'neutral');
             
             // Reset for new tax year
             this.player.capitalGains.currentTaxYear = 0;
             this.player.capitalGains.allowanceUsed = 0;
         } else {
             // No capital gains during the tax year
-            this.addNotification(`Tax year ended with no capital gains to report.`);
+            this.addNotification(`Tax year ended with no capital gains to report.`, 'neutral');
         }
     }
 
@@ -391,13 +415,13 @@ export class Game {
                 `Total Annual Income: £${totalAnnualIncome.toFixed(2)}\n` +
                 `Salary Income: £${this.player.salaryIncomeTaxYear.toFixed(2)}\n` +
                 `Rental Income: £${yearlyRentalIncome.toFixed(2)}\n` +
-                `Tax Due on Rental Income: £${taxDue.toFixed(2)}`
+                `Tax Due on Rental Income: £${taxDue.toFixed(2)}`, 'neutral'
             );
         } else if (yearlyRentalIncome > 0) {
             // No tax due but there was rental income
             this.addNotification(
                 `No rental income tax due as your rental income of £${yearlyRentalIncome.toFixed(2)} ` +
-                `is within the property allowance.`
+                `is within the property allowance.`, 'neutral'
             );
         }
         
@@ -406,10 +430,10 @@ export class Game {
         this.player.salaryIncomeTaxYear = 0;
     }
 
-    addNotification(message: string): void {
+    addNotification(message: string, type: 'positive' | 'negative' | 'neutral' = 'neutral'): void {
         const timestamp = this.formatGameTime();
         // Add to the beginning of the array (newest first)
-        this.notifications.unshift({ message, timestamp });
+        this.notifications.unshift({ message, timestamp, type });
         
         // Keep only the last 20 notifications
         if (this.notifications.length > 20) {
@@ -441,7 +465,7 @@ export class Game {
                     this.shownNews.push(newsId);
                     
                     // Add to game notifications
-                    this.addNotification(`NEWS: ${newsEvent.title}`);
+                    this.addNotification(`NEWS: ${newsEvent.title}`, 'neutral');
                     
                     // Add to event history
                     this.eventHistory.push({
@@ -535,7 +559,7 @@ export class Game {
         const finalNetWorth = this.player.getNetWorth();
         
         // Add notification
-        this.addNotification(`Game Over! You've reached age ${this.player.age} with a final net worth of £${finalNetWorth.toFixed(2)}.`);
+        this.addNotification(`Game Over! You've reached age ${this.player.age} with a final net worth of £${finalNetWorth.toFixed(2)}.`, 'negative');
         
         // Set game state to ended
         this.gameState = GameState.ENDED;
@@ -569,7 +593,7 @@ export class Game {
         
         // Check if player has enough cash
         if (this.player.cash < totalCost) {
-            this.addNotification(`You don't have enough cash to buy ${quantity} shares of ${symbol}.`);
+            this.addNotification(`You don't have enough cash to buy ${quantity} shares of ${symbol}.`, 'negative');
             return false;
         }
         
@@ -595,7 +619,7 @@ export class Game {
         this.player.cash -= totalCost;
         
         // Add notification
-        this.addNotification(`Bought ${quantity} shares of ${symbol} at £${currentPrice.toFixed(2)} per share.`);
+        this.addNotification(`Bought ${quantity} shares of ${symbol} at £${currentPrice.toFixed(2)} per share.`, 'positive');
         
         // Add to event history
         this.eventHistory.push({
@@ -610,7 +634,7 @@ export class Game {
     sellStock(symbol: string, quantity: number): boolean {
         // Check if player owns the stock
         if (!this.player.stocks[symbol] || this.player.stocks[symbol].shares < quantity) {
-            this.addNotification(`You don't own ${quantity} shares of ${symbol}.`);
+            this.addNotification(`You don't own ${quantity} shares of ${symbol}.`, 'negative');
             return false;
         }
         
@@ -641,7 +665,7 @@ export class Game {
         this.player.cash += totalValue;
         
         // Add notification
-        this.addNotification(`Sold ${quantity} shares of ${symbol} at £${currentPrice.toFixed(2)} per share.`);
+        this.addNotification(`Sold ${quantity} shares of ${symbol} at £${currentPrice.toFixed(2)} per share.`, 'positive');
         
         // Add to event history
         this.eventHistory.push({
@@ -657,7 +681,7 @@ export class Game {
     buyProperty(property: any): boolean {
         // Check if player has enough cash
         if (this.player.cash < property.purchasePrice) {
-            this.addNotification(`You don't have enough cash to buy this property.`);
+            this.addNotification(`You don't have enough cash to buy this property.`, 'negative');
             return false;
         }
         
@@ -673,7 +697,7 @@ export class Game {
         }
         
         // Add notification
-        this.addNotification(`Bought a ${property.size}sqm property in ${property.location} for £${property.purchasePrice.toFixed(2)}.`);
+        this.addNotification(`Bought a ${property.size}sqm property in ${property.location} for £${property.purchasePrice.toFixed(2)}.`, 'positive');
         
         // Add to event history
         this.eventHistory.push({
@@ -688,7 +712,7 @@ export class Game {
     sellProperty(propertyIndex: number): boolean {
         // Check if property exists
         if (propertyIndex < 0 || propertyIndex >= this.player.properties.length) {
-            this.addNotification(`Invalid property selection.`);
+            this.addNotification(`Invalid property selection.`, 'negative');
             return false;
         }
         
@@ -715,7 +739,7 @@ export class Game {
         }
         
         // Add notification
-        this.addNotification(`Sold your property in ${property.location} for £${currentValue.toFixed(2)}.`);
+        this.addNotification(`Sold your property in ${property.location} for £${currentValue.toFixed(2)}.`, 'positive');
         
         // Add to event history
         this.eventHistory.push({
@@ -731,7 +755,7 @@ export class Game {
     deposit(amount: number): boolean {
         // Check if player has enough cash
         if (this.player.cash < amount) {
-            this.addNotification(`You don't have enough cash to deposit £${amount.toFixed(2)}.`);
+            this.addNotification(`You don't have enough cash to deposit £${amount.toFixed(2)}.`, 'negative');
             return false;
         }
         
@@ -740,7 +764,7 @@ export class Game {
         this.player.savings += amount;
         
         // Add notification
-        this.addNotification(`Deposited £${amount.toFixed(2)} into your savings account.`);
+        this.addNotification(`Deposited £${amount.toFixed(2)} into your savings account.`, 'positive');
         
         return true;
     }
@@ -748,7 +772,7 @@ export class Game {
     withdraw(amount: number): boolean {
         // Check if player has enough savings
         if (this.player.savings < amount) {
-            this.addNotification(`You don't have enough savings to withdraw £${amount.toFixed(2)}.`);
+            this.addNotification(`You don't have enough savings to withdraw £${amount.toFixed(2)}.`, 'negative');
             return false;
         }
         
@@ -757,7 +781,7 @@ export class Game {
         this.player.cash += amount;
         
         // Add notification
-        this.addNotification(`Withdrew £${amount.toFixed(2)} from your savings account.`);
+        this.addNotification(`Withdrew £${amount.toFixed(2)} from your savings account.`, 'positive');
         
         return true;
     }
@@ -766,7 +790,7 @@ export class Game {
     processMarriage(): boolean {
         // Check if already married
         if (this.player.married) {
-            this.addNotification(`You're already married!`);
+            this.addNotification(`You're already married!`, 'negative');
             return false;
         }
         
@@ -781,7 +805,7 @@ export class Game {
         this.player.cash += spouseAssets;
         
         // Add notification
-        this.addNotification(`Congratulations on your marriage! Your spouse brings £${spouseAssets.toFixed(2)} in assets.`);
+        this.addNotification(`Congratulations on your marriage! Your spouse brings £${spouseAssets.toFixed(2)} in assets.`, 'positive');
         
         // Add to event history
         this.eventHistory.push({
@@ -797,7 +821,7 @@ export class Game {
     buyCar(car: any): boolean {
         // Check if player has enough cash
         if (this.player.cash < car.purchasePrice) {
-            this.addNotification(`You don't have enough cash to buy this car.`);
+            this.addNotification(`You don't have enough cash to buy this car.`, 'negative');
             return false;
         }
         
@@ -813,7 +837,7 @@ export class Game {
         this.player.cash -= car.purchasePrice;
         
         // Add notification
-        this.addNotification(`Bought a ${car.make} ${car.model} for £${car.purchasePrice.toFixed(2)}.`);
+        this.addNotification(`Bought a ${car.make} ${car.model} for £${car.purchasePrice.toFixed(2)}.`, 'positive');
         
         // Add to event history
         this.eventHistory.push({
@@ -828,7 +852,7 @@ export class Game {
     sellCar(): boolean {
         // Check if player has a car
         if (!this.player.car) {
-            this.addNotification(`You don't have a car to sell.`);
+            this.addNotification(`You don't have a car to sell.`, 'negative');
             return false;
         }
         
@@ -839,7 +863,7 @@ export class Game {
         this.player.cash += currentValue;
         
         // Add notification
-        this.addNotification(`Sold your ${this.player.car.make} ${this.player.car.model} for £${currentValue.toFixed(2)}.`);
+        this.addNotification(`Sold your ${this.player.car.make} ${this.player.car.model} for £${currentValue.toFixed(2)}.`, 'positive');
         
         // Remove car
         this.player.car = null;
@@ -863,7 +887,7 @@ export class Game {
         this.player.cash += loan.amount;
         
         // Add notification
-        this.addNotification(`Took out a ${loan.type} loan for £${loan.amount.toFixed(2)}.`);
+        this.addNotification(`Took out a ${loan.type} loan for £${loan.amount.toFixed(2)}.`, 'positive');
         
         // Add to event history
         this.eventHistory.push({
@@ -879,7 +903,7 @@ export class Game {
     buyInsurance(type: keyof Player['insurance'], cost: number): boolean {
         // Check if player has enough cash
         if (this.player.cash < cost) {
-            this.addNotification(`You don't have enough cash to buy ${type} insurance.`);
+            this.addNotification(`You don't have enough cash to buy ${type} insurance.`, 'negative');
             return false;
         }
         
@@ -890,7 +914,7 @@ export class Game {
         this.player.cash -= cost;
         
         // Add notification
-        this.addNotification(`Purchased ${type} insurance for £${cost.toFixed(2)}.`);
+        this.addNotification(`Purchased ${type} insurance for £${cost.toFixed(2)}.`, 'positive');
         
         return true;
     }
@@ -900,7 +924,7 @@ export class Game {
         this.player.insurance[type] = false;
         
         // Add notification
-        this.addNotification(`Cancelled your ${type} insurance.`);
+        this.addNotification(`Cancelled your ${type} insurance.`, 'negative');
     }
 
     // Sound settings
@@ -998,7 +1022,7 @@ export class Game {
         this.savedGames = this.getSavedGames();
         
         // Add notification
-        this.addNotification(`Game saved as "${name}"`);
+        this.addNotification(`Game saved as "${name}"`, 'positive');
     }
 
     // Load specific saved game
@@ -1520,7 +1544,6 @@ export class Game {
         // Process rent payment if player is renting
         if (this.player.housing?.type === 'RENT') {
             this.player.cash -= this.player.monthlyHousingPayment;
-            this.addNotification(`Paid monthly rent of £${this.player.monthlyHousingPayment.toFixed(2)} for ${this.player.housing.name}`);
         }
 
         // Process rental income from investment properties
@@ -1561,7 +1584,9 @@ export class Game {
         
         // Notify about significant happiness changes
         if (Math.abs(happiness.total - this._lastHappiness) > 10) {
-            this.addNotification(this.getHappinessChangeMessage(happiness.total - this._lastHappiness));
+            const change = happiness.total - this._lastHappiness;
+            const message = change > 0 ? `Your life satisfaction has improved significantly! (+${change.toFixed(0)} points)` : `Your life satisfaction has decreased significantly. (${change.toFixed(0)} points)`;
+            this.addNotification(message, change > 0 ? 'positive' : 'negative');
         }
         
         this._lastHappiness = happiness.total;
@@ -1589,7 +1614,7 @@ export class Game {
 
         const event = events[Math.floor(Math.random() * events.length)];
         event.effect();
-        this.addNotification(event.message);
+        this.addNotification(event.message, 'negative');
     }
 
     private triggerPositiveLifeEvent(): void {
@@ -1612,20 +1637,136 @@ export class Game {
 
         const event = events[Math.floor(Math.random() * events.length)];
         event.effect();
-        this.addNotification(event.message);
-    }
-
-    private getHappinessChangeMessage(change: number): string {
-        if (change > 0) {
-            return `Your life satisfaction has improved significantly! (+${change.toFixed(0)} points)`;
-        } else {
-            return `Your life satisfaction has decreased significantly. (${change.toFixed(0)} points)`;
-        }
+        this.addNotification(event.message, 'positive');
     }
 
     private processYearEnd(): void {
         // Implement year-end processing logic
         console.log("Processing year-end...");
+
+        // Recalculate player's rent if they are renting
+        if (this.player.housing?.type === 'RENT') {
+            // Calculate new monthly rent
+            const newRent = calculateRent(
+                this.player.housing.location,
+                this.player.currentYear,
+                this.player.housing.size,
+                this.player.housing.condition
+            );
+            
+            if (newRent > this.player.monthlyHousingPayment) {
+                this.addNotification(
+                    `Your landlord has increased the rent by ${Math.abs(newRent - this.player.monthlyHousingPayment).toFixed(0)} ` +
+                    `to £${newRent.toFixed(0)} per month.`, 'negative'
+                );
+                // Update player's monthly housing payment
+                this.player.monthlyHousingPayment = newRent;
+                this.player.housing.monthlyPayment = newRent;
+            }
+        }
+
+        // Recalculate rental income for investment properties
+        for (const property of this.player.properties) {
+            if (property.isRental && property.type === 'OWNED') {
+                // Calculate new rent with market discount
+                const newRent = calculateRent(
+                    property.location,
+                    this.player.currentYear,
+                    property.size,
+                    property.condition,
+                    true // Apply market discount
+                );
+                
+                // If rent changed significantly (more than 2%), notify player
+                if (property.rentalIncome) {
+                    const rentChange = ((newRent - property.rentalIncome) / property.rentalIncome) * 100;
+                    const isPositive = newRent > property.rentalIncome;
+                    if (Math.abs(rentChange) > 2) {
+                        this.addNotification(
+                            `Rental income from ${property.name} has ${isPositive ? 'increased' : 'decreased'} by ${Math.abs(rentChange).toFixed(1)}% ` +
+                            `to £${newRent.toFixed(0)} per month.`, isPositive ? 'positive' : 'negative'
+                        );
+                    }
+                }
+                
+                // Update rental income
+                property.rentalIncome = newRent;
+            }
+        }
+
+        // Update player's rent expense
+        this.player.updateRent();
+    }
+
+    private checkRentAnniversaries(): void {
+        // Check player's rental anniversary if they are renting
+        if (this.player.housing?.type === 'RENT' && this.player.housing.rentalStartDate) {
+            const monthsSinceStart = 
+                (this.player.currentYear - this.player.housing.rentalStartDate.year) * 12 +
+                (this.player.currentMonth - this.player.housing.rentalStartDate.month);
+            
+            // If it's been exactly a year (12, 24, 36 months etc.)
+            if (monthsSinceStart > 0 && monthsSinceStart % 12 === 0) {
+                // Calculate new monthly rent
+                const newRent = calculateRent(
+                    this.player.housing.location,
+                    this.player.currentYear,
+                    this.player.housing.size,
+                    this.player.housing.condition
+                );
+                
+                // If rent changed significantly (more than 2%), notify player
+                const rentChange = ((newRent - this.player.monthlyHousingPayment) / this.player.monthlyHousingPayment) * 100;
+                if (Math.abs(rentChange) > 2) {
+                    this.addNotification(
+                        `Your landlord has ${rentChange > 0 ? 'increased' : 'decreased'} the rent by ${Math.abs(rentChange).toFixed(1)}% ` +
+                        `to £${newRent.toFixed(2)} per month on your rental anniversary.`, 'positive'
+                    );
+                }
+                
+                // Update player's monthly housing payment
+                this.player.monthlyHousingPayment = newRent;
+                this.player.housing.monthlyPayment = newRent;
+            }
+        }
+
+        // Check rental anniversaries for investment properties
+        for (const property of this.player.properties) {
+            if (property.isRental && property.type === 'OWNED' && property.rentalStartDate) {
+                const monthsSinceStart = 
+                    (this.player.currentYear - property.rentalStartDate.year) * 12 +
+                    (this.player.currentMonth - property.rentalStartDate.month);
+                
+                // If it's been exactly a year
+                if (monthsSinceStart > 0 && monthsSinceStart % 12 === 0) {
+                    // Calculate new rent with market discount
+                    const newRent = calculateRent(
+                        property.location,
+                        this.player.currentYear,
+                        property.size,
+                        property.condition,
+                        true // Apply market discount
+                    );
+                    
+                    // If rent changed significantly (more than 2%), notify player
+                    if (property.rentalIncome) {
+                        const rentChange = ((newRent - property.rentalIncome) / property.rentalIncome) * 100;
+                        if (Math.abs(rentChange) > 2) {
+                            this.addNotification(
+                                `Rental income from ${property.name} has ${rentChange > 0 ? 'increased' : 'decreased'} by ${Math.abs(rentChange).toFixed(1)}% ` +
+                                `to £${newRent.toFixed(2)} per month on the rental anniversary.`, 'positive'
+                            );
+                        }
+                    }
+                    
+                    // Update rental income
+                    property.rentalIncome = newRent;
+                }
+            }
+        }
+
+        // Update player's rent expense
+        this.player.updateRent();
     }
 
     setDifficulty(difficultyOption: { name: GameDifficulty; startingCash: number; baseSalary: number }): void {
@@ -1641,7 +1782,7 @@ export class Game {
         this.setGameState(GameState.PAUSED);
         
         // Add notification about difficulty selection
-        this.addNotification(`Game started in ${difficultyOption.name} mode.`);
+        this.addNotification(`Game started in ${difficultyOption.name} mode.`, 'positive');
     }
 
     private processMonthlyExpenses(): void {
@@ -1654,7 +1795,6 @@ export class Game {
                 // Remove the expense
                 this.player.monthlyExpenses[temp.category] -= temp.amount;
                 this.temporaryExpenses.splice(i, 1);
-                this.addNotification(`Your temporary ${temp.category} expense of £${temp.amount} has expired.`);
             }
         }
     }
@@ -1669,5 +1809,30 @@ export class Game {
             monthsLeft: months,
             category
         });
+    }
+
+    private checkPropertyDeterioration(): void {
+        // Check each owned property for deterioration
+        for (const property of this.player.properties) {
+            if (property.type === 'OWNED' && property.condition > 1) {
+                // 1/720 chance each day
+                if (Math.random() * 720 < 1) {
+                    property.condition--;
+                    
+                    // Notify player
+                    this.addNotification(
+                        `${property.name} has deteriorated to condition ${property.condition}/10. ` +
+                        `Consider renovating to maintain property value.`, 'neutral'
+                    );
+
+                    // If property is being rented out, add warning about potential rent impact
+                    if (property.isRental) {
+                        this.addNotification(
+                            `The deterioration of ${property.name} may affect rental income at the next rental anniversary.`, 'neutral'
+                        );
+                    }
+                }
+            }
+        }
     }
 } 

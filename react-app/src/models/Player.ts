@@ -85,6 +85,8 @@ export class Player implements PlayerType {
         modifiers: HappinessModifiers;
     };
     private baseSalary: number;
+    private currentSalary: number;
+    private lastSalaryUpdateYear: number;
 
     constructor(config?: PlayerConfig) {
         // Calculate initial security deposit
@@ -95,6 +97,7 @@ export class Player implements PlayerType {
         const adjustedStartingCash = (config?.startingCash || 15000) + initialSecurityDeposit;
         this.cash = adjustedStartingCash;
         this.baseSalary = config?.baseSalary || 30000;
+        this.currentSalary = this.baseSalary;
         
         // Initialize basic properties
         this.age = GAME_DATA.config.startAge;
@@ -193,6 +196,8 @@ export class Player implements PlayerType {
                 location: 0
             }
         };
+
+        this.lastSalaryUpdateYear = GAME_DATA.config.startYear;
     }
 
     // Initialize stock prices at the start of the game
@@ -223,14 +228,6 @@ export class Player implements PlayerType {
     }
 
     calculateMonthlyIncome(): number {
-        // Base income adjusted for inflation
-        const currentYear = this.currentYear;
-        const yearsSince2005 = currentYear - 2005;
-        const inflationAdjustedIncome = this.baseSalary * Math.pow(1.02, yearsSince2005);
-
-        // Career progression bonus (3% per year of experience)
-        const experienceBonus = inflationAdjustedIncome * (yearsSince2005 * 0.03);
-
         // Calculate rental income from properties
         let rentalIncome = 0;
         for (const property of this.properties) {
@@ -239,7 +236,7 @@ export class Player implements PlayerType {
             }
         }
 
-        return Math.round(inflationAdjustedIncome + experienceBonus + rentalIncome);
+        return Math.round(this.currentSalary + rentalIncome);
     }
 
     calculateNetMonthlyIncome(): number {
@@ -908,6 +905,26 @@ export class Player implements PlayerType {
 
     // Track income for tax purposes
     salaryIncomeTaxYear: number = 0;
+
+    // Getter for current salary
+    getCurrentSalary(): number {
+        return this.currentSalary;
+    }
+
+    // Method to update salary
+    updateSalary(newSalary: number): void {
+        this.currentSalary = newSalary;
+    }
+
+    // Method to get last salary update year
+    getLastSalaryUpdateYear(): number {
+        return this.lastSalaryUpdateYear;
+    }
+
+    // Method to set last salary update year
+    setLastSalaryUpdateYear(year: number): void {
+        this.lastSalaryUpdateYear = year;
+    }
 }
 
 export const createPlayer = (name: string): Player => {

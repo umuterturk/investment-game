@@ -45,10 +45,6 @@ interface IncomeTaxRates {
     [key: number]: TaxBracket[];
 }
 
-interface Salaries {
-    [key: number]: number;
-}
-
 export interface RentalIncomeTaxBand {
   startAmount: number;
   endAmount: number | null;
@@ -59,6 +55,16 @@ export interface RentalIncomeTaxYear {
   year: number;
   propertyAllowance: number;
   bands: RentalIncomeTaxBand[];
+}
+
+interface MedianSalaryData {
+    median_salary: number;
+    increase_rate: number;
+    salary_index: number;
+}
+
+interface MedianSalaries {
+    [key: number]: MedianSalaryData;
 }
 
 // Define the Region type
@@ -464,30 +470,7 @@ export const GAME_DATA = {
         ]
     } as IncomeTaxRates,
     
-    // Average Salaries by Year (UK, annual gross)
-    salaries: {
-        2005: 24000,
-        2006: 25000,
-        2007: 26000,
-        2008: 26500,
-        2009: 26500,
-        2010: 27000,
-        2011: 27500,
-        2012: 28000,
-        2013: 28500,
-        2014: 29000,
-        2015: 30000,
-        2016: 31000,
-        2017: 32000,
-        2018: 33000,
-        2019: 34000,
-        2020: 35000,
-        2021: 36000,
-        2022: 38000,
-        2023: 40000,
-        2024: 42000
-    } as Salaries,
-    
+
     // Random Events
     events: [
         {
@@ -510,6 +493,7 @@ export const GAME_DATA = {
                             if (player.insurance.home) {
                                 return {
                                     message: `Your property at ${property.location} had a fire, but insurance covered most of the damage. You paid a £500 excess. Property condition decreased by 2 points.`,
+                                    type: 'negative',
                                     cashChange: -500,
                                     propertyEffect: {
                                         id: property.id,
@@ -519,6 +503,7 @@ export const GAME_DATA = {
                             } else {
                                 return {
                                     message: `Your property at ${property.location} had a fire! Repairs cost £${damage.toFixed(0)}. Property condition decreased by 2 points.`,
+                                    type: 'negative',
                                     cashChange: -damage,
                                     propertyEffect: {
                                         id: property.id,
@@ -542,11 +527,13 @@ export const GAME_DATA = {
                 if (player.insurance.health) {
                     return {
                         message: `You had a medical emergency. Your health insurance covered most costs, but you paid £200 excess.`,
+                        type: 'negative',
                         cashChange: -200
                     };
                 } else {
                     return {
                         message: `You had a medical emergency and had to pay £${cost.toFixed(0)} in medical bills.`,
+                        type: 'negative',
                         cashChange: -cost
                     };
                 }
@@ -561,6 +548,7 @@ export const GAME_DATA = {
                 const monthsWithoutJob = 1 + Math.floor(Math.random() * 3);
                 return {
                     message: `You lost your job and will be without income for ${monthsWithoutJob} months.`,
+                    type: 'negative',
                     jobLoss: monthsWithoutJob
                 };
             }
@@ -573,6 +561,7 @@ export const GAME_DATA = {
             effect: (player: any) => {
                 return {
                     message: `A stock market crash has occurred! Your stock portfolio value has dropped significantly.`,
+                    type: 'negative',
                     marketCrash: true
                 };
             }
@@ -586,6 +575,7 @@ export const GAME_DATA = {
                 if (player.married) {
                     return {
                         message: `Your marriage has ended in divorce. Half of your assets will be divided.`,
+                        type: 'negative',
                         divorce: true
                     };
                 }
@@ -603,11 +593,13 @@ export const GAME_DATA = {
                     if (player.insurance.car) {
                         return {
                             message: `You had a car accident, but insurance covered most of the damage. You paid a £250 excess.`,
+                            type: 'negative',
                             cashChange: -250
                         };
                     } else {
                         return {
                             message: `You had a car accident! Repairs cost £${damage.toFixed(0)}.`,
+                            type: 'negative',
                             cashChange: -damage
                         };
                     }
@@ -640,6 +632,7 @@ export const GAME_DATA = {
 
                             return {
                                 message: `Your property at ${property.location} needs urgent repairs costing £${repairCost.toFixed(0)}. Property condition improved by ${conditionImprovement} points after repairs.`,
+                                type: 'negative',
                                 cashChange: -repairCost,
                                 propertyEffect: {
                                     id: property.id,
@@ -661,6 +654,7 @@ export const GAME_DATA = {
                 if (player.age >= 25 && player.age <= 40) {
                     return {
                         message: `Congratulations! You have a child. This will increase your monthly expenses by £500.`,
+                        type: 'positive',
                         childExpense: 500
                     };
                 }
@@ -676,6 +670,7 @@ export const GAME_DATA = {
                 const amount = 5000 + Math.random() * 20000;
                 return {
                     message: `You received an inheritance of £${amount.toFixed(0)}.`,
+                    type: 'positive',
                     cashChange: amount
                 };
             }
@@ -690,11 +685,13 @@ export const GAME_DATA = {
                 if (player.insurance.contents) {
                     return {
                         message: `You were a victim of theft, but your contents insurance covered most of the loss. You paid a £100 excess.`,
+                        type: 'negative',
                         cashChange: -100
                     };
                 } else {
                     return {
                         message: `You were a victim of theft and lost £${amount.toFixed(0)}.`,
+                        type: 'negative',
                         cashChange: -amount
                     };
                 }
@@ -910,7 +907,31 @@ export const GAME_DATA = {
                 { startAmount: 32401, endAmount: null, rate: 40 }
             ]
         }
-    ]
+    ],
+
+    // Median Salary Data by Year (UK)
+    medianSalaries: {
+        2005: { median_salary: 33598.50, increase_rate: 1.000000000, salary_index: 1.000000000 },
+        2006: { median_salary: 35288.40, increase_rate: 1.050296888, salary_index: 1.050296888 },
+        2007: { median_salary: 36767.20, increase_rate: 1.041906122, salary_index: 1.094310758 },
+        2008: { median_salary: 37077.10, increase_rate: 1.008428708, salary_index: 1.103534384 },
+        2009: { median_salary: 35479.00, increase_rate: 0.956897924, salary_index: 1.055969761 },
+        2010: { median_salary: 36379.20, increase_rate: 1.025372756, salary_index: 1.082762623 },
+        2011: { median_salary: 37363.80, increase_rate: 1.027064916, salary_index: 1.112067503 },
+        2012: { median_salary: 38511.10, increase_rate: 1.030706192, salary_index: 1.146214861 },
+        2013: { median_salary: 40232.70, increase_rate: 1.044703994, salary_index: 1.197455244 },
+        2014: { median_salary: 41584.00, increase_rate: 1.033587107, salary_index: 1.237674301 },
+        2015: { median_salary: 42928.50, increase_rate: 1.032332147, salary_index: 1.277690968 },
+        2016: { median_salary: 44606.10, increase_rate: 1.039078934, salary_index: 1.327621769 },
+        2017: { median_salary: 46553.50, increase_rate: 1.043657706, salary_index: 1.385582690 },
+        2018: { median_salary: 48163.70, increase_rate: 1.034588162, salary_index: 1.433507448 },
+        2019: { median_salary: 49575.60, increase_rate: 1.029314608, salary_index: 1.475530158 },
+        2020: { median_salary: 45329.10, increase_rate: 0.914342943, salary_index: 1.349140587 },
+        2021: { median_salary: 50522.70, increase_rate: 1.114575405, salary_index: 1.503718916 },
+        2022: { median_salary: 55862.10, increase_rate: 1.105683188, salary_index: 1.662636725 },
+        2023: { median_salary: 57821.90, increase_rate: 1.035082820, salary_index: 1.720966710 },
+        2024: { median_salary: 59160.00, increase_rate: 1.023141751, salary_index: 1.760792893 }
+    } as MedianSalaries
 } as const; 
 
 // Function to get interest rate for a specific date

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Housing } from '../models/types';
 import { useGameContext } from '../context/GameContext';
 import { GAME_DATA, getInterestRateForYearMonth, calculateStampDuty } from '../data/gameData';
+import { calculateRent } from '../utils/housingUtils';
 import '../styles/HousingMarket.css';
 
 interface HousingMarketProps {
@@ -169,15 +170,14 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
   };
 
   // Helper function to handle security deposit payment
-  const handleSecurityDepositPayment = (property: Housing): Housing | null => {
+  const handleSecurityDepositPayment = (property: Housing): number | null => {
     if (property.type === 'RENT') {
       const securityDeposit = property.monthlyPayment * 3;
       if (game.player.cash < securityDeposit) {
-        alert(`You need ${formatCurrency(securityDeposit)} (3 months rent) as security deposit!`);
-        return null;
+        game.addNotification(`You need ${formatCurrency(securityDeposit)} (3 months rent) as security deposit!`, 'negative');
+        return 0;
       }
       
-      console.log('Paying security deposit for new rental:', securityDeposit);
       game.player.cash -= securityDeposit;
       
       const updatedProperty = {
@@ -195,29 +195,29 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
         game.housingMarket.rentals[rentalIndex] = updatedProperty;
       }
       
-      return updatedProperty;
+      return securityDeposit;
     }
     
-    return property;
+    return null;
   };
 
-  const handleRentHouse = (house: Housing): void => {
-    const updatedProperty = handleSecurityDepositPayment(house);
-    if (!updatedProperty) return; // If security deposit payment failed
+  const handleRentHouse = (newRentedHouse: Housing): void => {
+    const depositPaid = handleSecurityDepositPayment(newRentedHouse);
+    if (!depositPaid || depositPaid === 0) return; // If security deposit payment failed
 
     const oldPrimaryResidence = game.player.housing;
         // Refund security deposit from old rental property
     handleSecurityDepositRefund(oldPrimaryResidence);
     
-    game.player.housing = updatedProperty;
-    game.player.monthlyHousingPayment = updatedProperty.monthlyPayment;
+    game.player.housing = newRentedHouse;
+    game.player.monthlyHousingPayment = newRentedHouse.monthlyPayment;
     game.player.monthlyExpenses = {
       ...game.player.monthlyExpenses,
-      rent: updatedProperty.monthlyPayment
+      rent: newRentedHouse.monthlyPayment
     };
     game.player.updateTransportCosts();
 
-    game.addNotification(`Rented ${updatedProperty.name} for ${formatCurrency(updatedProperty.monthlyPayment)} per month`);
+    game.addNotification(`Rented ${newRentedHouse.name} for ${formatCurrency(newRentedHouse.monthlyPayment)} per month, paid ${formatCurrency(depositPaid)} as security deposit.`);
     updateGame(game);
     onClose();
   };
@@ -248,27 +248,22 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
     updateGame(game);
   };
 
-  const handleMoveIn = (property: Housing) => {
+  const handleMoveIn = (ownedHouseToMoveIn: Housing) => {
     // Store the current primary residence if it exists
     const oldPrimaryResidence = game.player.housing;
-    
-    console.log('Moving out of:', oldPrimaryResidence);
-    console.log('Old residence type:', oldPrimaryResidence?.type);
-    console.log('Old residence security deposit:', oldPrimaryResidence?.securityDeposit);
     
     // Refund security deposit from old rental property
     handleSecurityDepositRefund(oldPrimaryResidence);
     
     // Pay security deposit for new rental property
-    const updatedProperty = handleSecurityDepositPayment(property);
-    if (!updatedProperty) return; // If security deposit payment failed
+    if (ownedHouseToMoveIn === oldPrimaryResidence) return; // If trying to move into the same house
     
     // Set the selected property as the new primary residence
-    game.player.housing = updatedProperty;
-    game.player.monthlyHousingPayment = updatedProperty.monthlyPayment;
+    game.player.housing = ownedHouseToMoveIn;
+    game.player.monthlyHousingPayment = 0;
     game.player.monthlyExpenses = {
       ...game.player.monthlyExpenses,
-      rent: updatedProperty.type === 'RENT' ? updatedProperty.monthlyPayment : 0
+      rent: 0
     };
     game.player.updateTransportCosts();
 
@@ -280,24 +275,19 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
       }
     }
 
-    game.addNotification(`Moved into ${updatedProperty.name}`);
+    game.addNotification(`Moved into ${ownedHouseToMoveIn.name}`, 'positive');
     updateGame(game);
   };
 
   const handleRentOut = (property: Housing) => {
-    // Calculate rental income using the same logic as estimated rent
-    const baseRent = GAME_DATA.rentPrice[property.location][game.player.currentYear] || 
-                    GAME_DATA.rentPrice[property.location][Number(Object.keys(GAME_DATA.rentPrice[property.location]).slice(-1)[0])];
-    
-    // Adjust rent based on size (baseRent is for 50m²)
-    const sizeMultiplier = property.size / 50;
-    
-    // Adjust for condition (±10% per point difference from 7, which is the baseline condition)
-    const conditionAdjustment = 1 + ((property.condition - 7) * 0.1);
-    
-    // Apply a 5% discount to reflect real-world conditions (vacancy, negotiations, etc.)
-    const marketRent = Math.round(baseRent * sizeMultiplier * conditionAdjustment);
-    const actualRent = Math.round(marketRent * 0.95);
+    // Calculate rental income using the utility function
+    const actualRent = calculateRent(
+        property.location,
+        game.player.currentYear,
+        property.size,
+        property.condition,
+        true // Apply market discount
+    );
 
     // Update the property
     property.isRental = true;
@@ -450,17 +440,12 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
   };
 
   const calculateEstimatedRent = (house: Housing): number => {
-    // Get base rent for the region
-    const baseRent = GAME_DATA.rentPrice[house.location][game.player.currentYear] || 
-                    GAME_DATA.rentPrice[house.location][Number(Object.keys(GAME_DATA.rentPrice[house.location]).slice(-1)[0])];
-    
-    // Adjust rent based on size (baseRent is for 50m²)
-    const sizeMultiplier = house.size / 50;
-    
-    // Adjust for condition (±10% per point difference from 7, which is the baseline condition)
-    const conditionAdjustment = 1 + ((house.condition - 7) * 0.1);
-    
-    return Math.round(baseRent * sizeMultiplier * conditionAdjustment);
+    return calculateRent(
+        house.location,
+        game.player.currentYear,
+        house.size,
+        house.condition
+    );
   };
 
   const calculatePropertyValue = (property: Housing) => {

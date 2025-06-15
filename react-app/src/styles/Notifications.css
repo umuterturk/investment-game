@@ -46,6 +46,26 @@
     text-align: left;
 }
 
+.notification-icon {
+    flex-shrink: 0;
+    font-size: 18px;
+    margin-right: 8px;
+    display: flex;
+    align-items: center;
+}
+
+.notification-icon.positive {
+    color: #829b82;
+}
+
+.notification-icon.negative {
+    color: #a78886;
+}
+
+.notification-icon.neutral {
+    color: #a1afba;
+}
+
 .notification-message {
     color: #e0e0e0;
     flex-grow: 1;

@@ -131,6 +131,7 @@ export interface NewsEvent {
 // Random Event Effect Return type
 export interface RandomEventEffect {
     message: string;
+    type?: 'positive' | 'negative' | 'neutral';
     cashChange?: number;
     jobLoss?: number;
     marketCrash?: boolean;
