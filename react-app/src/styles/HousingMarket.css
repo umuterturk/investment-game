@@ -122,7 +122,7 @@
 }
 
 .selected .house-details-modal {
-  max-height: 500px; /* Adjust this value based on your content */
+  max-height: 600px; /* Adjust this value based on your content */
 }
 
 .house-details-modal h4 {
@@ -186,6 +186,15 @@ button:disabled:hover {
   color: #e74c3c;
   font-size: 0.9em;
   margin: 5px 0;
+}
+
+.info-message {
+  color: #3498db;
+  font-size: 0.9em;
+  margin: 5px 0;
+  padding: 8px;
+  background-color: rgba(52, 152, 219, 0.1);
+  border-radius: 4px;
 }
 
 .close-button {
@@ -266,69 +275,71 @@ button:disabled:hover {
   margin-top: 15px;
 }
 
-.action-button {
+.hm-action-button {
   flex: 1;
-  padding: 8px 12px;
+  padding: 0;
   border: none;
   border-radius: 4px;
   font-size: 0.9em;
   font-weight: 500;
   cursor: pointer;
   transition: background-color 0.3s ease;
+  max-width: 30%;
+  height: 40px;
 }
 
-.action-button.move-in {
+.hm-action-button.move-in {
   background-color: #2ecc71;
   color: white;
 }
 
-.action-button.move-in:hover {
+.hm-action-button.move-in:hover {
   background-color: #27ae60;
 }
 
-.action-button.rent-out {
+.hm-action-button.rent-out {
   background-color: #3498db;
   color: white;
 }
 
-.action-button.rent-out:hover {
+.hm-action-button.rent-out:hover {
   background-color: #2980b9;
 }
 
-.action-button.stop-renting {
+.hm-action-button.stop-renting {
   background-color: #e74c3c;
   color: white;
 }
 
-.action-button.stop-renting:hover {
+.hm-action-button.stop-renting:hover {
   background-color: #c0392b;
 }
 
-.action-button.sell {
+.hm-action-button.sell {
   background-color: #e67e22;
   color: white;
 }
 
-.action-button.sell:hover {
+.hm-action-button.sell:hover {
   background-color: #d35400;
 }
 
-.action-button.sell:disabled {
+.hm-action-button.sell:disabled {
   background-color: #7f8c8d;
   cursor: not-allowed;
 }
 
-.action-button.sell:disabled:hover {
+.hm-action-button.sell:disabled:hover {
   background-color: #7f8c8d;
 }
-.action-button.renovate {
+.hm-action-button.renovate {
   background-color: #9c27b0;
   color: white;
 }
-.action-button.renovate:hover {
+.hm-action-button.renovate:hover {
   background-color: #7b1fa2;
 }
-.action-button.renovate:disabled {
+.hm-action-button.renovate:disabled {
   background-color: #7f8c8d;
   cursor: not-allowed;
 }

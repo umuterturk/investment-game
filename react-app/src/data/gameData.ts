@@ -1,9 +1,5 @@
 // Game Data - UK Economic Data (2005-2024)
 
-// Define interfaces for the data structures
-interface InterestRates {
-    [key: number]: number;
-}
 
 interface DetailedInterestRate {
     date: string;  // Format: 'YYYY-MM-DD'
@@ -51,6 +47,18 @@ interface IncomeTaxRates {
 
 interface Salaries {
     [key: number]: number;
+}
+
+export interface RentalIncomeTaxBand {
+  startAmount: number;
+  endAmount: number | null;
+  rate: number;
+}
+
+export interface RentalIncomeTaxYear {
+  year: number;
+  propertyAllowance: number;
+  bands: RentalIncomeTaxBand[];
 }
 
 // Define the Region type
@@ -157,14 +165,6 @@ export const GAME_DATA = {
         }
     } as MonthlyInflationIndex,
     
-    // Historical Interest Rates (Bank of England base rate)
-    interestRates: {
-        // Yearly average rates (simplified)
-        2005: 4.75, 2006: 5.00, 2007: 5.50, 2008: 2.00, 2009: 0.50,
-        2010: 0.50, 2011: 0.50, 2012: 0.50, 2013: 0.50, 2014: 0.50,
-        2015: 0.50, 2016: 0.25, 2017: 0.50, 2018: 0.75, 2019: 0.75,
-        2020: 0.10, 2021: 0.10, 2022: 3.50, 2023: 5.25, 2024: 5.00
-    } as InterestRates,
     
     // Detailed historical interest rates
     detailedInterestRates: {
@@ -220,6 +220,59 @@ export const GAME_DATA = {
         2020: { allowance: 12300, basicRate: 0.10, higherRate: 0.20 },
         2024: { allowance: 3000, basicRate: 0.10, higherRate: 0.20 }
     } as CapitalGainsTax,
+    
+    // Stamp Duty Land Tax rates (UK)
+    stampDuty: {
+        2005: {
+            standardRates: [
+                { threshold: 0, rate: 0 },
+                { threshold: 120000, rate: 0.01 },
+                { threshold: 250000, rate: 0.03 },
+                { threshold: 500000, rate: 0.04 }
+            ],
+            additionalPropertySurcharge: 0.03
+        },
+        2010: {
+            standardRates: [
+                { threshold: 0, rate: 0 },
+                { threshold: 125000, rate: 0.01 },
+                { threshold: 250000, rate: 0.03 },
+                { threshold: 500000, rate: 0.04 }
+            ],
+            additionalPropertySurcharge: 0.03
+        },
+        2015: {
+            standardRates: [
+                { threshold: 0, rate: 0 },
+                { threshold: 125000, rate: 0.02 },
+                { threshold: 250000, rate: 0.05 },
+                { threshold: 925000, rate: 0.10 },
+                { threshold: 1500000, rate: 0.12 }
+            ],
+            additionalPropertySurcharge: 0.03
+        },
+        2020: {
+            standardRates: [
+                { threshold: 0, rate: 0 },
+                { threshold: 500000, rate: 0.05 },
+                { threshold: 925000, rate: 0.10 },
+                { threshold: 1500000, rate: 0.12 }
+            ],
+            additionalPropertySurcharge: 0.03
+        },
+        2024: {
+            standardRates: [
+                { threshold: 0, rate: 0 },
+                { threshold: 250000, rate: 0.05 },
+                { threshold: 925000, rate: 0.10 },
+                { threshold: 1500000, rate: 0.12 }
+            ],
+            additionalPropertySurcharge: 0.03
+        }
+    } as Record<number, {
+        standardRates: Array<{threshold: number, rate: number}>,
+        additionalPropertySurcharge: number
+    }>,
     
     // Inflation Data (CPI)
     inflation: {
@@ -658,6 +711,206 @@ export const GAME_DATA = {
         'West Midlands': 1.1,
         'North West': 1.2     // More reliance on private transport
     } as const satisfies Record<Region, number>,
+
+    rentalIncomeTaxData: [
+        {
+            year: 2024,
+            propertyAllowance: 1000,
+            bands: [
+                { startAmount: 0, endAmount: 12570, rate: 0 },
+                { startAmount: 12571, endAmount: 50270, rate: 20 },
+                { startAmount: 50271, endAmount: 125140, rate: 40 },
+                { startAmount: 125141, endAmount: null, rate: 45 }
+            ]
+        },
+        {
+            year: 2023,
+            propertyAllowance: 1000,
+            bands: [
+                { startAmount: 0, endAmount: 12570, rate: 0 },
+                { startAmount: 12571, endAmount: 50270, rate: 20 },
+                { startAmount: 50271, endAmount: 125140, rate: 40 },
+                { startAmount: 125141, endAmount: null, rate: 45 }
+            ]
+        },
+        {
+            year: 2022,
+            propertyAllowance: 1000,
+            bands: [
+                { startAmount: 0, endAmount: 12570, rate: 0 },
+                { startAmount: 12571, endAmount: 50270, rate: 20 },
+                { startAmount: 50271, endAmount: 150000, rate: 40 },
+                { startAmount: 150001, endAmount: null, rate: 45 }
+            ]
+        },
+        {
+            year: 2021,
+            propertyAllowance: 1000,
+            bands: [
+                { startAmount: 0, endAmount: 12570, rate: 0 },
+                { startAmount: 12571, endAmount: 50270, rate: 20 },
+                { startAmount: 50271, endAmount: 150000, rate: 40 },
+                { startAmount: 150001, endAmount: null, rate: 45 }
+            ]
+        },
+        {
+            year: 2020,
+            propertyAllowance: 1000,
+            bands: [
+                { startAmount: 0, endAmount: 12500, rate: 0 },
+                { startAmount: 12501, endAmount: 50000, rate: 20 },
+                { startAmount: 50001, endAmount: 150000, rate: 40 },
+                { startAmount: 150001, endAmount: null, rate: 45 }
+            ]
+        },
+        {
+            year: 2019,
+            propertyAllowance: 1000,
+            bands: [
+                { startAmount: 0, endAmount: 12500, rate: 0 },
+                { startAmount: 12501, endAmount: 50000, rate: 20 },
+                { startAmount: 50001, endAmount: 150000, rate: 40 },
+                { startAmount: 150001, endAmount: null, rate: 45 }
+            ]
+        },
+        {
+            year: 2018,
+            propertyAllowance: 1000,
+            bands: [
+                { startAmount: 0, endAmount: 11850, rate: 0 },
+                { startAmount: 11851, endAmount: 46350, rate: 20 },
+                { startAmount: 46351, endAmount: 150000, rate: 40 },
+                { startAmount: 150001, endAmount: null, rate: 45 }
+            ]
+        },
+        {
+            year: 2017,
+            propertyAllowance: 1000,
+            bands: [
+                { startAmount: 0, endAmount: 11500, rate: 0 },
+                { startAmount: 11501, endAmount: 45000, rate: 20 },
+                { startAmount: 45001, endAmount: 150000, rate: 40 },
+                { startAmount: 150001, endAmount: null, rate: 45 }
+            ]
+        },
+        {
+            year: 2016,
+            propertyAllowance: 0,
+            bands: [
+                { startAmount: 0, endAmount: 11000, rate: 0 },
+                { startAmount: 11001, endAmount: 43000, rate: 20 },
+                { startAmount: 43001, endAmount: 150000, rate: 40 },
+                { startAmount: 150001, endAmount: null, rate: 45 }
+            ]
+        },
+        {
+            year: 2015,
+            propertyAllowance: 0,
+            bands: [
+                { startAmount: 0, endAmount: 10600, rate: 0 },
+                { startAmount: 10601, endAmount: 42385, rate: 20 },
+                { startAmount: 42386, endAmount: 150000, rate: 40 },
+                { startAmount: 150001, endAmount: null, rate: 45 }
+            ]
+        },
+        {
+            year: 2014,
+            propertyAllowance: 0,
+            bands: [
+                { startAmount: 0, endAmount: 10000, rate: 0 },
+                { startAmount: 10001, endAmount: 41865, rate: 20 },
+                { startAmount: 41866, endAmount: 150000, rate: 40 },
+                { startAmount: 150001, endAmount: null, rate: 45 }
+            ]
+        },
+        {
+            year: 2013,
+            propertyAllowance: 0,
+            bands: [
+                { startAmount: 0, endAmount: 9440, rate: 0 },
+                { startAmount: 9441, endAmount: 41450, rate: 20 },
+                { startAmount: 41451, endAmount: 150000, rate: 40 },
+                { startAmount: 150001, endAmount: null, rate: 45 }
+            ]
+        },
+        {
+            year: 2012,
+            propertyAllowance: 0,
+            bands: [
+                { startAmount: 0, endAmount: 8105, rate: 0 },
+                { startAmount: 8106, endAmount: 42475, rate: 20 },
+                { startAmount: 42476, endAmount: 150000, rate: 40 },
+                { startAmount: 150001, endAmount: null, rate: 50 }
+            ]
+        },
+        {
+            year: 2011,
+            propertyAllowance: 0,
+            bands: [
+                { startAmount: 0, endAmount: 7475, rate: 0 },
+                { startAmount: 7476, endAmount: 35000, rate: 20 },
+                { startAmount: 35001, endAmount: 150000, rate: 40 },
+                { startAmount: 150001, endAmount: null, rate: 50 }
+            ]
+        },
+        {
+            year: 2010,
+            propertyAllowance: 0,
+            bands: [
+                { startAmount: 0, endAmount: 6475, rate: 0 },
+                { startAmount: 6476, endAmount: 37400, rate: 20 },
+                { startAmount: 37401, endAmount: 150000, rate: 40 },
+                { startAmount: 150001, endAmount: null, rate: 50 }
+            ]
+        },
+        {
+            year: 2009,
+            propertyAllowance: 0,
+            bands: [
+                { startAmount: 0, endAmount: 6475, rate: 0 },
+                { startAmount: 6476, endAmount: 37400, rate: 20 },
+                { startAmount: 37401, endAmount: 150000, rate: 40 },
+                { startAmount: 150001, endAmount: null, rate: 40 }
+            ]
+        },
+        {
+            year: 2008,
+            propertyAllowance: 0,
+            bands: [
+                { startAmount: 0, endAmount: 6035, rate: 0 },
+                { startAmount: 6036, endAmount: 34800, rate: 20 },
+                { startAmount: 34801, endAmount: 150000, rate: 40 },
+                { startAmount: 150001, endAmount: null, rate: 40 }
+            ]
+        },
+        {
+            year: 2007,
+            propertyAllowance: 0,
+            bands: [
+                { startAmount: 0, endAmount: 5225, rate: 0 },
+                { startAmount: 5226, endAmount: 33300, rate: 22 },
+                { startAmount: 33301, endAmount: null, rate: 40 }
+            ]
+        },
+        {
+            year: 2006,
+            propertyAllowance: 0,
+            bands: [
+                { startAmount: 0, endAmount: 4895, rate: 0 },
+                { startAmount: 4896, endAmount: 33300, rate: 22 },
+                { startAmount: 33301, endAmount: null, rate: 40 }
+            ]
+        },
+        {
+            year: 2005,
+            propertyAllowance: 0,
+            bands: [
+                { startAmount: 0, endAmount: 4745, rate: 0 },
+                { startAmount: 4746, endAmount: 32400, rate: 22 },
+                { startAmount: 32401, endAmount: null, rate: 40 }
+            ]
+        }
+    ]
 } as const; 
 
 // Function to get interest rate for a specific date
@@ -681,4 +934,41 @@ export function getInterestRate(date: Date): number {
 export function getInterestRateForYearMonth(year: number, month: number): number {
     const date = new Date(year, month);
     return getInterestRate(date);
-} 
+}
+
+// Function to calculate Stamp Duty Land Tax
+export function calculateStampDuty(price: number, year: number, isAdditionalProperty: boolean = false): number {
+    // Find the closest available tax year that's not greater than the current year
+    const taxYears = Object.keys(GAME_DATA.stampDuty).map(Number);
+    let closestYear = taxYears[0];
+    
+    for (const taxYear of taxYears) {
+        if (taxYear <= year && taxYear > closestYear) {
+            closestYear = taxYear;
+        }
+    }
+    
+    const { standardRates, additionalPropertySurcharge } = GAME_DATA.stampDuty[closestYear];
+    let totalTax = 0;
+    
+    // Calculate tax for each bracket
+    for (let i = 1; i < standardRates.length; i++) {
+        const currentBracket = standardRates[i];
+        const prevBracket = standardRates[i - 1];
+        
+        if (price > prevBracket.threshold) {
+            const amountInBracket = Math.min(
+                price - prevBracket.threshold,
+                (currentBracket.threshold - prevBracket.threshold) || Infinity
+            );
+            totalTax += amountInBracket * currentBracket.rate;
+        }
+    }
+    
+    // Add additional property surcharge if applicable
+    if (isAdditionalProperty) {
+        totalTax += price * additionalPropertySurcharge;
+    }
+    
+    return Math.round(totalTax);
+}

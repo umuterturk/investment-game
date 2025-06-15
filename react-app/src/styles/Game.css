@@ -69,4 +69,34 @@
 
 .net-income-section h4 {
     color: #2ecc71;
+}
+
+.detail-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid #3a3a3a;
+}
+
+.detail-item:last-child {
+    border-bottom: none;
+}
+
+.detail-item .label {
+    color: #bbb;
+}
+
+.detail-item .negative {
+    color: #e74c3c;
+}
+
+.debt-breakdown {
+    padding-left: 20px;
+    font-size: 0.9em;
+    background-color: #333;
+}
+
+.debt-breakdown .label {
+    color: #999;
 } 

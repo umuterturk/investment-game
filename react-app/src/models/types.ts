@@ -108,6 +108,7 @@ export interface Player {
     capitalGains: CapitalGains;
     housing: Housing | null;
     monthlyHousingPayment: number;
+    calculateRemainingMortgage(property: Housing): number;
 }
 
 // Event History Item type
@@ -180,6 +181,7 @@ export interface Housing {
     isRental?: boolean;
     rentalIncome?: number;
     purchaseYear?: number;
+    purchaseMonth?: number;
     securityDeposit?: number;
     rentalStartDate?: {
         year: number;

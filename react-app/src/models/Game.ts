@@ -23,6 +23,11 @@ export class Game {
     housingMarket: HousingMarket;
     private _lastHappiness: number = 70;
     difficulty: GameDifficulty | null = null;
+    private temporaryExpenses: Array<{
+        amount: number;
+        monthsLeft: number;
+        category: keyof Player['monthlyExpenses'];
+    }> = [];
 
     constructor() {
         console.log("Creating new Game instance");
@@ -82,6 +87,7 @@ export class Game {
             this.processMonthlyIncome();
             this.processSavingsInterest();
             this.processLoans();
+            this.processMonthlyExpenses();
             this.player.adjustExpensesForInflation();
             
             // Check for news events
@@ -139,9 +145,10 @@ export class Game {
                 }
             }
             
-            // Process capital gains tax at the start of the new tax year (April)
+            // Process taxes at the start of the new tax year (April)
             if (this.player.currentMonth === 3 && this.player.currentDay === 1) {
                 this.processCapitalGainsTax();
+                this.processRentalIncomeTax();
             }
         }
     }
@@ -175,26 +182,30 @@ export class Game {
         // Calculate monthly income based on current year
         const grossMonthlyIncome = this.player.calculateMonthlyIncome();
         
-        // Calculate yearly income for tax purposes (including rental income)
-        const projectedYearlyIncome = grossMonthlyIncome * 12;
+        // Calculate rental income separately
+        let monthlyRentalIncome = 0;
+        for (const property of this.player.properties) {
+            if (property.isRental && property.rentalIncome && property.type === 'OWNED') {
+                monthlyRentalIncome += property.rentalIncome;
+            }
+        }
         
-        // Calculate tax for this month (annualized for consistent interface)
-        const annualizedTax = this.player.calculateIncomeTax(projectedYearlyIncome);
-        const monthlyTax = annualizedTax / 12;
+        // Add monthly incomes to yearly tracking for tax purposes
+        this.player.rentalIncomeTaxYear += monthlyRentalIncome;
+        this.player.salaryIncomeTaxYear += (grossMonthlyIncome - monthlyRentalIncome);
         
-        // Calculate net monthly income
-        const netMonthlyIncome = grossMonthlyIncome - monthlyTax;
+        // Calculate monthly tax based on accumulated salary income
+        const annualizedTax = this.player.calculateIncomeTax(this.player.salaryIncomeTaxYear);
+        const previousMonthTax = this.player.calculateIncomeTax(
+            this.player.salaryIncomeTaxYear - (grossMonthlyIncome - monthlyRentalIncome)
+        );
+        const monthlyTax = annualizedTax - previousMonthTax;
+        
+        // Calculate net monthly income (rental income is taxed separately at year end)
+        const netMonthlyIncome = grossMonthlyIncome - monthlyTax + monthlyRentalIncome;
         
         // Store gross monthly income
         this.player.monthlyIncome = grossMonthlyIncome;
-        
-        // Add notification with tax details
-        this.addNotification(
-            `Monthly Income Summary:\n` +
-            `Gross Income: £${grossMonthlyIncome.toFixed(2)}\n` +
-            `Income Tax: £${monthlyTax.toFixed(2)}\n` +
-            `Net Income: £${netMonthlyIncome.toFixed(2)}`
-        );
         
         // Add net income to cash
         this.player.cash += netMonthlyIncome;
@@ -364,6 +375,37 @@ export class Game {
         }
     }
 
+    processRentalIncomeTax(): void {
+        const yearlyRentalIncome = this.player.rentalIncomeTaxYear;
+        const totalAnnualIncome = this.player.salaryIncomeTaxYear + yearlyRentalIncome;
+        
+        const taxDue = this.player.calculateRentalIncomeTax(yearlyRentalIncome, totalAnnualIncome);
+        
+        if (taxDue > 0) {
+            // Deduct tax from cash
+            this.player.cash -= taxDue;
+            
+            // Add notification
+            this.addNotification(
+                `Rental Income Tax Summary:\n` +
+                `Total Annual Income: £${totalAnnualIncome.toFixed(2)}\n` +
+                `Salary Income: £${this.player.salaryIncomeTaxYear.toFixed(2)}\n` +
+                `Rental Income: £${yearlyRentalIncome.toFixed(2)}\n` +
+                `Tax Due on Rental Income: £${taxDue.toFixed(2)}`
+            );
+        } else if (yearlyRentalIncome > 0) {
+            // No tax due but there was rental income
+            this.addNotification(
+                `No rental income tax due as your rental income of £${yearlyRentalIncome.toFixed(2)} ` +
+                `is within the property allowance.`
+            );
+        }
+        
+        // Reset for new tax year
+        this.player.rentalIncomeTaxYear = 0;
+        this.player.salaryIncomeTaxYear = 0;
+    }
+
     addNotification(message: string): void {
         const timestamp = this.formatGameTime();
         // Add to the beginning of the array (newest first)
@@ -373,6 +415,10 @@ export class Game {
         if (this.notifications.length > 20) {
             this.notifications.pop(); // Remove from the end
         }
+    }
+
+    getNumberOfOwnedProperties(): number {
+        return this.player.properties.filter(p => p.type === 'OWNED').length;
     }
 
     private formatGameTime(): string {
@@ -1481,7 +1527,7 @@ export class Game {
         for (const property of this.player.properties) {
             if (property.isRental && property.rentalIncome) {
                 this.player.cash += property.rentalIncome;
-                this.addNotification(`Received rental income of £${property.rentalIncome.toFixed(2)} from ${property.name}`);
+                // this.addNotification(`Received rental income of £${property.rentalIncome.toFixed(2)} from ${property.name}`);
             }
         }
     }
@@ -1489,18 +1535,28 @@ export class Game {
     private checkHappinessEvents(): void {
         const happiness = this.player.happiness;
         
-        // Check for severe unhappiness
-        if (happiness.total < 30) {
-            if (Math.random() < 0.01) { // 1% chance per day when very unhappy
-                this.triggerNegativeLifeEvent();
-            }
+        // Helper function to calculate Gaussian probability
+        const gaussian = (x: number, mean: number, stdDev: number): number => {
+            const exp = -Math.pow(x - mean, 2) / (2 * Math.pow(stdDev, 2));
+            return Math.exp(exp);
+        };
+        
+        // Calculate positive event probability with two peaks
+        // First peak at happiness 30 (struggling but motivated)
+        // Second peak at happiness 70 (doing well and ambitious)
+        const positiveProbability = 
+            (1/200) * (gaussian(happiness.total, 30, 10) + gaussian(happiness.total, 70, 10));
+        
+        // Calculate negative event probability with peak at 90 (overconfident/reckless)
+        const negativeProbability = (1/200) * gaussian(happiness.total, 90, 10);
+        
+        // Check for random events based on calculated probabilities
+        if (Math.random() < positiveProbability) {
+            this.triggerPositiveLifeEvent();
         }
         
-        // Check for high happiness benefits
-        if (happiness.total > 80) {
-            if (Math.random() < 0.01) { // 1% chance per day when very happy
-                this.triggerPositiveLifeEvent();
-            }
+        if (Math.random() < negativeProbability) {
+            this.triggerNegativeLifeEvent();
         }
         
         // Notify about significant happiness changes
@@ -1512,18 +1568,20 @@ export class Game {
     }
 
     private triggerNegativeLifeEvent(): void {
+        const cost = this.player.monthlyIncome * 0.01;
+        
         const events = [
             {
-                message: "The stress is affecting your work performance. Your income decreased by 5%.",
+                message: `The stress is making you spend more on entertainment. Extra £${cost.toFixed(0)} monthly for 3 months.`,
                 effect: () => {
-                    this.player.monthlyIncome *= 0.95;
+                    this.addTemporaryExpense(cost, 3, 'entertainment');
                     this.player.addShortTermHappinessModifier(-5, 30);
                 }
             },
             {
-                message: "Your health is suffering from stress. Medical expenses increased.",
+                message: `Your health is suffering from stress. Medical expenses increased by £${(cost/2).toFixed(0)} monthly for 6 months.`,
                 effect: () => {
-                    this.player.monthlyExpenses.other += 100;
+                    this.addTemporaryExpense(cost/2, 6, 'other');
                     this.player.addShortTermHappinessModifier(-5, 30);
                 }
             }
@@ -1546,7 +1604,7 @@ export class Game {
             {
                 message: "Your work-life balance has improved. You received a small raise!",
                 effect: () => {
-                    this.player.monthlyIncome *= 1.02;
+                    this.player.monthlyIncome *= 1.01;
                     this.player.addShortTermHappinessModifier(5, 30);
                 }
             }
@@ -1584,5 +1642,32 @@ export class Game {
         
         // Add notification about difficulty selection
         this.addNotification(`Game started in ${difficultyOption.name} mode.`);
+    }
+
+    private processMonthlyExpenses(): void {
+        // Process temporary expenses
+        for (let i = this.temporaryExpenses.length - 1; i >= 0; i--) {
+            const temp = this.temporaryExpenses[i];
+            temp.monthsLeft--;
+            
+            if (temp.monthsLeft <= 0) {
+                // Remove the expense
+                this.player.monthlyExpenses[temp.category] -= temp.amount;
+                this.temporaryExpenses.splice(i, 1);
+                this.addNotification(`Your temporary ${temp.category} expense of £${temp.amount} has expired.`);
+            }
+        }
+    }
+
+    private addTemporaryExpense(amount: number, months: number, category: keyof Player['monthlyExpenses']): void {
+        // Add the expense to monthly expenses
+        this.player.monthlyExpenses[category] += amount;
+        
+        // Track it for removal later
+        this.temporaryExpenses.push({
+            amount,
+            monthsLeft: months,
+            category
+        });
     }
 } 

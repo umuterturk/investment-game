@@ -293,25 +293,28 @@ export class Player implements PlayerType {
         }
         
         const brackets = GAME_DATA.incomeTax[closestYear];
-        const monthlyIncome = yearlyIncome / 12;
-        const incomeSoFar = monthlyIncome * (this.currentMonth + 1);
         
-        // Calculate tax on income so far this year
-        let taxSoFar = 0;
+        // Calculate tax on income
+        let totalTax = 0;
+        let remainingIncome = yearlyIncome;
+        
         for (let i = 1; i < brackets.length; i++) {
             const currentBracket = brackets[i];
             const prevBracket = brackets[i - 1];
             
-            if (incomeSoFar > prevBracket.threshold) {
+            if (remainingIncome > prevBracket.threshold) {
                 const amountInBracket = Math.min(
-                    incomeSoFar - prevBracket.threshold,
+                    remainingIncome - prevBracket.threshold,
                     (currentBracket.threshold - prevBracket.threshold) || Infinity
                 );
-                taxSoFar += amountInBracket * currentBracket.rate;
+                totalTax += amountInBracket * currentBracket.rate;
+                remainingIncome -= amountInBracket;
             }
+            
+            if (remainingIncome <= 0) break;
         }
         
-        return taxSoFar;
+        return totalTax;
     }
 
     getTotalExpenses(): number {
@@ -431,6 +434,7 @@ export class Player implements PlayerType {
         for (const loan of this.loans) {
             loansValue += loan.remainingAmount || 0;
         }
+        loansValue += this.calculateRemainingMortgages();
 
         let carValue = this.car ? (this.car.value || 0) : 0;
 
@@ -816,6 +820,94 @@ export class Player implements PlayerType {
         const expiry = this.currentDay + (this.currentMonth * 30) + (this.currentYear * 365) + durationInDays;
         this.happiness.modifiers.shortTerm.push({ value, expiry });
     }
+
+    calculateRemainingMortgage(property: Housing): number {
+        if(property.type !== 'OWNED') return 0;
+        if (!property.purchaseYear) return 0;
+        
+        // Calculate original loan amount
+        const originalLoan = property.price * (1 - (property.downPayment || 0) / property.price);
+        
+        // Calculate number of payments made
+        const monthsSincePurchase = (this.currentYear - property.purchaseYear) * 12 + this.currentMonth;
+        const totalPayments = (property.mortgageTermYears || 30) * 12; // Default to 30 years if not specified
+        
+        // If loan is paid off
+        if (monthsSincePurchase >= totalPayments) return 0;
+        
+        // Calculate remaining balance using loan amortization formula
+        const monthlyRate = (property.mortgageRate || 0) / 12;
+        
+        return originalLoan * 
+            (Math.pow(1 + monthlyRate, totalPayments) - Math.pow(1 + monthlyRate, monthsSincePurchase)) /
+            (Math.pow(1 + monthlyRate, totalPayments) - 1);
+    }
+
+    calculateRemainingMortgages(): number {
+        return this.properties.reduce((total, property) => {
+            return total + this.calculateRemainingMortgage(property);
+        }, 0);
+    }
+
+    calculateTotalPropertyValue(): number {
+        return this.properties.reduce((total, property) => {
+            return total + this.getCurrentPropertyValue(property);
+        }, 0);
+    }
+
+    calculateRentalIncomeTax(yearlyRentalIncome: number, totalAnnualIncome: number): number {
+        // Find the closest available tax year that's not greater than the current year
+        const taxYears = GAME_DATA.rentalIncomeTaxData.map(data => data.year);
+        let closestYear = taxYears[0];
+        
+        for (const year of taxYears) {
+            if (year <= this.currentYear && year > closestYear) {
+                closestYear = year;
+            }
+        }
+        
+        const taxData = GAME_DATA.rentalIncomeTaxData.find(data => data.year === closestYear);
+        if (!taxData) return 0;
+
+        // Apply property allowance to rental income
+        const rentalIncomeAfterAllowance = Math.max(0, yearlyRentalIncome - taxData.propertyAllowance);
+        if (rentalIncomeAfterAllowance === 0) return 0;
+
+        // Calculate tax based on total income position
+        let totalTax = 0;
+        let remainingRentalIncome = rentalIncomeAfterAllowance;
+        let otherIncome = totalAnnualIncome - yearlyRentalIncome;
+
+        for (const band of taxData.bands) {
+            // Calculate how much of other income falls into this band
+            const otherIncomeInBand = Math.max(0, Math.min(
+                (band.endAmount === null ? Infinity : band.endAmount) - band.startAmount,
+                Math.max(0, otherIncome - band.startAmount)
+            ));
+
+            // Calculate remaining space in this band for rental income
+            const spaceInBand = (band.endAmount === null ? Infinity : band.endAmount) - 
+                               (band.startAmount + otherIncomeInBand);
+
+            // Calculate rental income that falls into this band
+            const rentalIncomeInBand = Math.min(remainingRentalIncome, spaceInBand);
+            if (rentalIncomeInBand <= 0) continue;
+
+            // Apply tax rate to rental income in this band
+            totalTax += (rentalIncomeInBand * band.rate) / 100;
+            remainingRentalIncome -= rentalIncomeInBand;
+            
+            if (remainingRentalIncome <= 0) break;
+        }
+
+        return totalTax;
+    }
+
+    // Track rental income for tax purposes
+    rentalIncomeTaxYear: number = 0;
+
+    // Track income for tax purposes
+    salaryIncomeTaxYear: number = 0;
 }
 
 export const createPlayer = (name: string): Player => {

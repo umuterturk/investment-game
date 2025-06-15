@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Housing } from '../models/types';
 import { useGameContext } from '../context/GameContext';
-import { GAME_DATA, getInterestRateForYearMonth } from '../data/gameData';
+import { GAME_DATA, getInterestRateForYearMonth, calculateStampDuty } from '../data/gameData';
 import '../styles/HousingMarket.css';
 
 interface HousingMarketProps {
@@ -15,6 +15,44 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
   const [expandedSection, setExpandedSection] = useState<'houses' | 'rentals' | 'owned' | null>(null);
   const [saleConfirmation, setSaleConfirmation] = useState<{property: Housing, index: number} | null>(null);
   const [renovationConfirmation, setRenovationConfirmation] = useState<{property: Housing, cost: number} | null>(null);
+
+  const getMinimumDownPayment = useCallback(() => {
+    const ownedProperties = game.getNumberOfOwnedProperties();
+    return ownedProperties === 0 ? 5 : ownedProperties === 1 ? 20 : 25; // 5% for first property, 20% for second, 25% for additional properties
+  }, [game]);
+
+  const calculateMaxMortgageLoanAmount = useCallback((): number => {
+    const annualIncome = game.player.monthlyIncome * 12;
+    return annualIncome * 4.5; // Maximum loan is 4.5 times annual income
+  }, [game.player.monthlyIncome]);
+
+  // Calculate required down payment percentage for a house based on price and max loan
+  const calculateRequiredDownPayment = useCallback((house: Housing): number => {
+    const maxLoan = calculateMaxMortgageLoanAmount();
+    const minDownPaymentPercent = getMinimumDownPayment();
+    
+    // Calculate the minimum down payment needed to meet the 4.5x rule
+    const loanNeeded = house.price * (1 - minDownPaymentPercent / 100);
+    
+    if (loanNeeded <= maxLoan) {
+      // If the minimum down payment satisfies the 4.5x rule, use that
+      return minDownPaymentPercent;
+    } else {
+      // Calculate the down payment percentage needed to satisfy the 4.5x rule
+      const requiredDownPayment = Math.ceil((1 - (maxLoan / house.price)) * 100);
+      return Math.min(100, Math.max(minDownPaymentPercent, requiredDownPayment));
+    }
+  }, [calculateMaxMortgageLoanAmount, getMinimumDownPayment]);
+
+  // Update down payment when number of owned properties changes or when selected house changes
+  useEffect(() => {
+    if (selectedHouse) {
+      const requiredDownPayment = calculateRequiredDownPayment(selectedHouse);
+      if (downPaymentPercent < requiredDownPayment) {
+        setDownPaymentPercent(requiredDownPayment);
+      }
+    }
+  }, [game.player.properties.length, selectedHouse, calculateRequiredDownPayment, downPaymentPercent]);
 
   // Generate new listings only when component mounts
   useEffect(() => {
@@ -36,9 +74,19 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
     return house.price * (downPaymentPercent / 100);
   };
 
+  const calculateStampDutyForHouse = (house: Housing): number => {
+    // Count number of properties owned (excluding rentals)
+    const ownedProperties = game.player.properties.filter(p => p.type === 'OWNED').length;
+    // If this is not replacing the primary residence, it's an additional property
+    const isAdditionalProperty = ownedProperties > 0;
+    return calculateStampDuty(house.price, game.player.currentYear, isAdditionalProperty);
+  };
+
   const canAffordDownPayment = (house: Housing): boolean => {
     const downPayment = calculateDownPayment(house);
-    return game.player.cash >= downPayment;
+    const stampDutyTax = calculateStampDutyForHouse(house);
+    const totalUpfrontCost = downPayment + stampDutyTax;
+    return game.player.cash >= totalUpfrontCost;
   };
 
   const toggleSection = (section: 'houses' | 'rentals' | 'owned') => {
@@ -51,8 +99,11 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
 
   const handleBuyHouse = (house: Housing): void => {
     const downPayment = calculateDownPayment(house);
-    if (game.player.cash < downPayment) {
-      alert("You don't have enough cash for the down payment!");
+    const stampDutyTax = calculateStampDutyForHouse(house);
+    const totalUpfrontCost = downPayment + stampDutyTax;
+
+    if (game.player.cash < totalUpfrontCost) {
+      alert("You don't have enough cash for the down payment and stamp duty!");
       return;
     }
 
@@ -65,7 +116,7 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
       purchaseYear: game.player.currentYear,
     };
 
-    game.player.cash -= downPayment;
+    game.player.cash -= totalUpfrontCost;
     game.player.properties.push(newHouse);
 
     if (!game.player.housing) {
@@ -78,7 +129,7 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
       game.player.updateTransportCosts();
     }
 
-    game.addNotification(`Purchased ${house.name} for ${formatCurrency(house.price)} with ${downPaymentPercent}% down payment`);
+    game.addNotification(`Purchased ${house.name} for ${formatCurrency(house.price)} with ${downPaymentPercent}% down payment and ${formatCurrency(stampDutyTax)} stamp duty`);
     updateGame(game);
     onClose();
   };
@@ -180,6 +231,13 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
     }).format(amount);
   };
 
+  const formatNumber = (amount: number): string => {
+    return new Intl.NumberFormat('en-GB', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    }).format(amount);
+  };
+
   const convertSqMToSqFt = (sqm: number): number => {
     return Math.round(sqm * 10.764);
   };
@@ -265,27 +323,6 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
     setSaleConfirmation(null);
   };
 
-  const calculateRemainingMortgage = (property: Housing): number => {
-    if (!property.purchaseYear) return 0;
-    
-    // Calculate original loan amount
-    const originalLoan = property.price * (1 - (property.downPayment || 0) / property.price);
-    
-    // Calculate number of payments made
-    const monthsSincePurchase = (game.player.currentYear - property.purchaseYear) * 12 + game.player.currentMonth;
-    const totalPayments = (property.mortgageTermYears || 30) * 12; // Default to 30 years if not specified
-    
-    // If loan is paid off
-    if (monthsSincePurchase >= totalPayments) return 0;
-    
-    // Calculate remaining balance using loan amortization formula
-    const monthlyRate = (property.mortgageRate || 0) / 12;
-    
-    return originalLoan * 
-      (Math.pow(1 + monthlyRate, totalPayments) - Math.pow(1 + monthlyRate, monthsSincePurchase)) /
-      (Math.pow(1 + monthlyRate, totalPayments) - 1);
-  };
-
   const calculateEarlyRepaymentCharge = (property: Housing): number => {
     if (!property.purchaseYear) return 0;
     
@@ -299,7 +336,7 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
     const ercPercentage = Math.max(5 - yearsIntoMortgage, 0);
     
     // Calculate remaining mortgage
-    const remainingMortgage = calculateRemainingMortgage(property);
+    const remainingMortgage = game.player.calculateRemainingMortgage(property);
     
     return remainingMortgage * (ercPercentage / 100);
   };
@@ -316,7 +353,7 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
 
     try {
       // Calculate remaining mortgage debt using the new function
-      const remainingDebt = calculateRemainingMortgage(property);
+      const remainingDebt = game.player.calculateRemainingMortgage(property);
       console.log("Remaining debt:", remainingDebt);
 
       // Calculate early repayment charge
@@ -559,21 +596,21 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
                         )}
                         <div className="property-actions">
                           <button 
-                            className="action-button move-in"
+                            className="hm-action-button move-in"
                             onClick={() => handleMoveIn(property)}
                           >
                             Move In
                           </button>
                           {!property.isRental ? (
                             <button 
-                              className="action-button rent-out"
+                              className="hm-action-button rent-out"
                               onClick={() => handleRentOut(property)}
                             >
                               Rent Out
                             </button>
                           ) : (
                             <button 
-                              className="action-button stop-renting"
+                              className="hm-action-button stop-renting"
                               onClick={() => handleStopRenting(property)}
                             >
                               Stop Rent
@@ -581,14 +618,14 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
                           )}
                           <button 
                             onClick={() => handleRenovateConfirmation(property)}
-                            className="action-button renovate"
+                            className="hm-action-button renovate"
                             disabled={property.condition >= 10 || property.isRental}
                             title={property.isRental ? "Stop renting out the property to renovate" : property.condition >= 10 ? "Property is in perfect condition" : "Renovate property"}
                           >
                             Renovate
                           </button>
                           <button 
-                            className="action-button sell"
+                            className="hm-action-button sell"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleSaleConfirmation(property, index);
@@ -664,20 +701,33 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
                         {house.propertyTax && (
                           <p>Property Tax: {formatCurrency(house.propertyTax)}/year</p>
                         )}
+                        <p>Stamp Duty: {formatCurrency(calculateStampDutyForHouse(house))} 
+                          {game.player.properties.filter(p => p.type === 'OWNED').length > 0 && 
+                            " (includes additional property surcharge)"}
+                        </p>
                         <p>Current Interest Rate: {((house.mortgageRate ?? (getInterestRateForYearMonth(game.player.currentYear, game.player.currentMonth) / 100 + 0.02)) * 100).toFixed(2)}%</p>
                         <div className="down-payment-slider">
                           <label>Down Payment: {downPaymentPercent}%</label>
                           <input
                             type="range"
-                            min="5"
-                            max="50"
-                            value={downPaymentPercent}
+                            min={calculateRequiredDownPayment(house)}
+                            max="100"
+                            value={Math.max(downPaymentPercent, calculateRequiredDownPayment(house))}
                             onChange={(e) => setDownPaymentPercent(Number(e.target.value))}
                           />
                           <p>Down Payment Amount: {formatCurrency(calculateDownPayment(house))}</p>
+                          <p>Stamp Duty: {formatCurrency(calculateStampDutyForHouse(house))}</p>
+                          <p>Total Upfront Cost: {formatCurrency(calculateDownPayment(house) + calculateStampDutyForHouse(house))}</p>
                           <p>Monthly Payment: {formatCurrency(calculateMortgage(house))}</p>
                           {!canAffordDownPayment(house) && (
-                            <p className="error-message">Insufficient funds for down payment</p>
+                            <p className="error-message">Insufficient funds for down payment and stamp duty</p>
+                          )}
+                          {calculateRequiredDownPayment(house) > getMinimumDownPayment() && (
+                            <p className="info-message">
+                              Based on your annual income (£{formatNumber(game.player.calculateMonthlyIncome() * 12)}), 
+                              you need at least {calculateRequiredDownPayment(house)}% down payment for this property.
+                              This is because lenders cap loans at 4.5× annual income (£{formatNumber(calculateMaxMortgageLoanAmount())}).
+                            </p>
                           )}
                         </div>
                         <div className="investment-details">
@@ -781,7 +831,7 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
                 <div className="breakdown-item">
                   <span>Remaining Mortgage:</span>
                   <span className="negative">
-                    {formatCurrency(calculateRemainingMortgage(saleConfirmation.property))}
+                    {formatCurrency(game.player.calculateRemainingMortgage(saleConfirmation.property))}
                   </span>
                 </div>
 
@@ -791,7 +841,6 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
                     <span className="negative">
                       {formatCurrency(calculateEarlyRepaymentCharge(saleConfirmation.property))}
                     </span>
-                    <p className="erc-explanation">*Early repayment charge applies as you're selling before the end of your fixed-rate period</p>
                   </div>
                 )}
                 
@@ -824,8 +873,12 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
                   <span className="highlight">
                     {formatCurrency(
                       calculatePropertyValue(saleConfirmation.property) - 
-                      calculateRemainingMortgage(saleConfirmation.property) -
-                      calculateEarlyRepaymentCharge(saleConfirmation.property)
+                      game.player.calculateRemainingMortgage(saleConfirmation.property) -
+                      calculateEarlyRepaymentCharge(saleConfirmation.property) -
+                      // Deduct capital gains tax if there's a profit
+                      (calculatePropertyValue(saleConfirmation.property) - saleConfirmation.property.price > 0 
+                        ? (calculatePropertyValue(saleConfirmation.property) - saleConfirmation.property.price) * 0.20 
+                        : 0)
                     )}
                   </span>
                 </div>

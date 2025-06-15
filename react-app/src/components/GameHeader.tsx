@@ -480,16 +480,15 @@ const GameHeader: React.FC = () => {
             stocksValue += stock.shares * currentPrice;
         }
 
-        let propertiesValue = 0;
-        for (const property of game.player.properties) {
-            propertiesValue += game.player.getCurrentPropertyValue(property);
-        }
+        let propertiesValue = game.player.calculateTotalPropertyValue();
+        let totalMortgageDebt = game.player.calculateRemainingMortgages();
 
         let loansValue = 0;
         for (const loan of game.player.loans) {
             loansValue += loan.remainingAmount;
         }
 
+        const totalDebts = loansValue + totalMortgageDebt;
         const carValue = game.player.car ? game.player.car.value : 0;
 
         setModalTitle('Net Worth Details');
@@ -520,8 +519,16 @@ const GameHeader: React.FC = () => {
                     <span>{formatCurrency(carValue)}</span>
                 </div>
                 <div className="detail-item">
-                    <span className="label">Loans:</span>
-                    <span>-{formatCurrency(loansValue)}</span>
+                    <span className="label">Total Debts:</span>
+                    <span className="negative">-{formatCurrency(totalDebts)}</span>
+                </div>
+                <div className="detail-item debt-breakdown">
+                    <span className="label">• Loans:</span>
+                    <span className="negative">-{formatCurrency(loansValue)}</span>
+                </div>
+                <div className="detail-item debt-breakdown">
+                    <span className="label">• Mortgages:</span>
+                    <span className="negative">-{formatCurrency(totalMortgageDebt)}</span>
                 </div>
             </div>
         );
@@ -576,6 +583,7 @@ const GameHeader: React.FC = () => {
                     <h4>Tax (Monthly)</h4>
                     <p>Income Tax: {formatCurrency(monthlyTax)}</p>
                     <p><strong>Net Income After Tax: {formatCurrency(netIncomeAfterTax)}</strong></p>
+                    <p>Rental Income Tax will be calculated at the end of the year</p>
                 </div>
                 <div className="expenses-section">
                     <h4>Monthly Expenses</h4>
