@@ -5,7 +5,7 @@ import ActionPanel from './ActionPanel';
 import Notifications from './Notifications';
 import Modal from './Modal';
 import { useGameContext } from '../context/GameContext';
-import { GAME_DATA } from '../data/gameData';
+import { getInterestRateForYearMonth } from '../data/gameData';
 import '../styles/GameContainer.css';
 
 export const GameContainer: React.FC = () => {
@@ -50,7 +50,7 @@ export const GameContainer: React.FC = () => {
                                     <span className="material-icons">savings</span>
                                     <div>
                                         <div className="label">Interest</div>
-                                        <span>£{(game.player.savings * (GAME_DATA.interestRates[game.player.currentYear] || 0) * 0.7 / 100 / 12).toFixed(0)}</span>
+                                        <span>£{(game.player.savings * (getInterestRateForYearMonth(game.player.currentYear, game.player.currentMonth) * 0.7 / 100 / 12)).toFixed(0)}</span>
                                     </div>
                                 </div>
                                 <div className="summary-item">

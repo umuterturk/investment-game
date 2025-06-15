@@ -1,5 +1,5 @@
 import { Player as PlayerType, MonthlyExpenses, CapitalGains, Housing } from './types';
-import { GAME_DATA, Region } from '../data/gameData';
+import { GAME_DATA, Region, getInterestRateForYearMonth } from '../data/gameData';
 
 interface PlayerConfig {
     startingCash: number;
@@ -259,7 +259,7 @@ export class Player implements PlayerType {
         }
         
         // Calculate savings interest
-        const baseRate = GAME_DATA.interestRates[this.currentYear] || 0;
+        const baseRate = getInterestRateForYearMonth(this.currentYear, this.currentMonth);
         const savingsRate = baseRate * 0.7; // Savings accounts typically offer less than base rate
         const monthlyRate = savingsRate / 100 / 12;
         const savingsInterest = this.savings * monthlyRate;
@@ -282,7 +282,17 @@ export class Player implements PlayerType {
     }
 
     calculateIncomeTax(yearlyIncome: number): number {
-        const brackets = GAME_DATA.incomeTax[this.currentYear];
+        // Find the closest available tax year that's not greater than the current year
+        const taxYears = Object.keys(GAME_DATA.incomeTax).map(Number);
+        let closestYear = taxYears[0];
+        
+        for (const year of taxYears) {
+            if (year <= this.currentYear && year > closestYear) {
+                closestYear = year;
+            }
+        }
+        
+        const brackets = GAME_DATA.incomeTax[closestYear];
         const monthlyIncome = yearlyIncome / 12;
         const incomeSoFar = monthlyIncome * (this.currentMonth + 1);
         

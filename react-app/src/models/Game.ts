@@ -1,6 +1,6 @@
 import { Player } from './Player';
 import { GameState, EventHistoryItem, NewsEvent, RandomEventEffect, Housing, HousingMarket } from './types';
-import { GAME_DATA } from '../data/gameData';
+import { GAME_DATA, getInterestRateForYearMonth } from '../data/gameData';
 import { NEWS_EVENTS } from '../data/newsData';
 import { GameDifficulty } from '../components/WelcomeScreen';
 
@@ -207,7 +207,7 @@ export class Game {
         }
         
         // Get current interest rate
-        const baseRate = GAME_DATA.interestRates[this.player.currentYear] || 0;
+        const baseRate = getInterestRateForYearMonth(this.player.currentYear, this.player.currentMonth);
         const savingsRate = baseRate * 0.7; // Savings accounts typically offer less than base rate
         
         // Calculate monthly interest
@@ -1326,7 +1326,7 @@ export class Game {
                 condition: finalCondition,
                 appreciationRate: 0.03 + ((finalCondition - 5) * 0.002), // Better condition = slightly better appreciation
                 propertyTax: Math.round(totalPrice * 0.01), // 1% property tax
-                mortgageRate: GAME_DATA.interestRates[currentYear] / 100 + 0.02, // Base rate + 2% margin
+                mortgageRate: getInterestRateForYearMonth(currentYear, this.player.currentMonth) / 100 + 0.02, // Base rate + 2% margin
                 mortgageTermYears: 30
             };
         });

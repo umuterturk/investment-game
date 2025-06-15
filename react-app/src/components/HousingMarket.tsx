@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Housing } from '../models/types';
 import { useGameContext } from '../context/GameContext';
-import { GAME_DATA } from '../data/gameData';
+import { GAME_DATA, getInterestRateForYearMonth } from '../data/gameData';
 import '../styles/HousingMarket.css';
 
 interface HousingMarketProps {
@@ -26,7 +26,7 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
 
   const calculateMortgage = (house: Housing): number => {
     const principal = house.price * (1 - downPaymentPercent / 100);
-    const currentRate = GAME_DATA.interestRates[game.player.currentYear] / 100 + 0.02;
+    const currentRate = getInterestRateForYearMonth(game.player.currentYear, game.player.currentMonth) / 100 + 0.02;
     const monthlyRate = ((house.mortgageRate ?? currentRate) / 12);
     const numberOfPayments = ((house.mortgageTermYears ?? 30) * 12);
     return (principal * monthlyRate * Math.pow(1 + monthlyRate, numberOfPayments)) / (Math.pow(1 + monthlyRate, numberOfPayments) - 1);
@@ -664,7 +664,7 @@ export const HousingMarket: React.FC<HousingMarketProps> = ({ onClose }) => {
                         {house.propertyTax && (
                           <p>Property Tax: {formatCurrency(house.propertyTax)}/year</p>
                         )}
-                        <p>Current Interest Rate: {((house.mortgageRate ?? (GAME_DATA.interestRates[game.player.currentYear] / 100 + 0.02)) * 100).toFixed(2)}%</p>
+                        <p>Current Interest Rate: {((house.mortgageRate ?? (getInterestRateForYearMonth(game.player.currentYear, game.player.currentMonth) / 100 + 0.02)) * 100).toFixed(2)}%</p>
                         <div className="down-payment-slider">
                           <label>Down Payment: {downPaymentPercent}%</label>
                           <input

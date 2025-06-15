@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGameContext } from '../context/GameContext';
 import { GameState } from '../models/types';
-import { GAME_DATA } from '../data/gameData';
+import { GAME_DATA, getInterestRateForYearMonth } from '../data/gameData';
 import '../styles/GameHeader.css';
 
 const GameHeader: React.FC = () => {
@@ -542,7 +542,7 @@ const GameHeader: React.FC = () => {
         }
 
         // Calculate savings interest (monthly)
-        const baseRate = GAME_DATA.interestRates[game.player.currentYear] || 0;
+        const baseRate = getInterestRateForYearMonth(game.player.currentYear, game.player.currentMonth);
         const savingsRate = baseRate * 0.7; // Savings accounts typically offer less than base rate
         const monthlyRate = savingsRate / 100 / 12;
         const savingsInterest = game.player.savings * monthlyRate;

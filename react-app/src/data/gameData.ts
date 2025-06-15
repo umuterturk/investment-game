@@ -5,6 +5,15 @@ interface InterestRates {
     [key: number]: number;
 }
 
+interface DetailedInterestRate {
+    date: string;  // Format: 'YYYY-MM-DD'
+    rate: number;
+}
+
+interface DetailedInterestRates {
+    rates: DetailedInterestRate[];
+}
+
 interface CapitalGainsTax {
     [key: number]: { 
         allowance: number;
@@ -15,6 +24,12 @@ interface CapitalGainsTax {
 
 interface InflationRates {
     [key: number]: number;
+}
+
+interface MonthlyInflationIndex {
+    [key: number]: {
+        [key: number]: number;  // month (0-11) -> index value
+    };
 }
 
 interface YearlyPrices {
@@ -55,6 +70,93 @@ export const GAME_DATA = {
         regions: ['London', 'South East', 'East of England', 'South West', 'West Midlands', 'North West'] as Region[],
     },
     
+    // Monthly Inflation Index (2005-2025)
+    inflationIndex: {
+        2005: {
+            0: 77.0, 1: 77.2, 2: 77.5, 3: 77.8, 4: 78.1, 5: 78.1,
+            6: 78.2, 7: 78.4, 8: 78.6, 9: 78.7, 10: 78.7, 11: 78.9
+        },
+        2006: {
+            0: 78.5, 1: 78.8, 2: 78.9, 3: 79.4, 4: 79.9, 5: 80.1,
+            6: 80.0, 7: 80.4, 8: 80.5, 9: 80.6, 10: 80.8, 11: 81.3
+        },
+        2007: {
+            0: 80.6, 1: 81.0, 2: 81.4, 3: 81.6, 4: 81.8, 5: 82.0,
+            6: 81.5, 7: 81.8, 8: 81.9, 9: 82.3, 10: 82.5, 11: 83.0
+        },
+        2008: {
+            0: 82.4, 1: 83.0, 2: 83.4, 3: 84.0, 4: 84.6, 5: 85.2,
+            6: 85.1, 7: 85.7, 8: 86.1, 9: 85.9, 10: 85.8, 11: 85.5
+        },
+        2009: {
+            0: 84.9, 1: 85.6, 2: 85.8, 3: 86.0, 4: 86.4, 5: 86.7,
+            6: 86.7, 7: 87.0, 8: 87.1, 9: 87.2, 10: 87.5, 11: 88.0
+        },
+        2010: {
+            0: 87.8, 1: 88.2, 2: 88.7, 3: 89.2, 4: 89.4, 5: 89.5,
+            6: 89.3, 7: 89.8, 8: 89.8, 9: 90.0, 10: 90.3, 11: 91.2
+        },
+        2011: {
+            0: 91.3, 1: 92.0, 2: 92.2, 3: 93.2, 4: 93.4, 5: 93.3,
+            6: 93.3, 7: 93.8, 8: 94.4, 9: 94.5, 10: 94.6, 11: 95.1
+        },
+        2012: {
+            0: 94.6, 1: 95.1, 2: 95.4, 3: 96.0, 4: 95.9, 5: 95.5,
+            6: 95.6, 7: 96.1, 8: 96.5, 9: 97.0, 10: 97.2, 11: 97.6
+        },
+        2013: {
+            0: 97.1, 1: 97.8, 2: 98.1, 3: 98.3, 4: 98.5, 5: 98.3,
+            6: 98.3, 7: 98.7, 8: 99.1, 9: 99.1, 10: 99.2, 11: 99.6
+        },
+        2014: {
+            0: 99.0, 1: 99.5, 2: 99.7, 3: 100.1, 4: 100.0, 5: 100.2,
+            6: 99.9, 7: 100.2, 8: 100.3, 9: 100.4, 10: 100.1, 11: 100.1
+        },
+        2015: {
+            0: 99.3, 1: 99.5, 2: 99.7, 3: 99.9, 4: 100.1, 5: 100.2,
+            6: 100.0, 7: 100.3, 8: 100.2, 9: 100.3, 10: 100.3, 11: 100.3
+        },
+        2016: {
+            0: 99.5, 1: 99.8, 2: 100.2, 3: 100.2, 4: 100.4, 5: 100.6,
+            6: 100.6, 7: 100.9, 8: 101.1, 9: 101.2, 10: 101.4, 11: 101.9
+        },
+        2017: {
+            0: 101.4, 1: 102.1, 2: 102.5, 3: 102.9, 4: 103.3, 5: 103.3,
+            6: 103.2, 7: 103.8, 8: 104.1, 9: 104.2, 10: 104.6, 11: 104.9
+        },
+        2018: {
+            0: 104.4, 1: 104.9, 2: 105.0, 3: 105.4, 4: 105.8, 5: 105.8,
+            6: 105.8, 7: 106.5, 8: 106.6, 9: 106.7, 10: 107.0, 11: 107.1
+        },
+        2019: {
+            0: 106.3, 1: 106.8, 2: 107.0, 3: 107.6, 4: 107.9, 5: 107.9,
+            6: 107.9, 7: 108.4, 8: 108.5, 9: 108.3, 10: 108.5, 11: 108.5
+        },
+        2020: {
+            0: 108.2, 1: 108.6, 2: 108.6, 3: 108.5, 4: 108.5, 5: 108.6,
+            6: 109.1, 7: 108.6, 8: 109.1, 9: 109.1, 10: 108.9, 11: 109.2
+        },
+        2021: {
+            0: 109.0, 1: 109.1, 2: 109.4, 3: 110.1, 4: 110.8, 5: 111.3,
+            6: 111.3, 7: 112.1, 8: 112.4, 9: 113.6, 10: 114.5, 11: 115.1
+        },
+        2022: {
+            0: 114.9, 1: 115.8, 2: 117.1, 3: 120.0, 4: 120.8, 5: 121.8,
+            6: 122.5, 7: 123.1, 8: 123.8, 9: 126.2, 10: 126.7, 11: 127.2
+        },
+        2023: {
+            0: 126.4, 1: 127.9, 2: 128.9, 3: 130.4, 4: 131.3, 5: 131.5,
+            6: 130.9, 7: 131.3, 8: 132.0, 9: 132.0, 10: 131.7, 11: 132.2
+        },
+        2024: {
+            0: 131.5, 1: 132.3, 2: 133.0, 3: 133.5, 4: 133.9, 5: 134.1,
+            6: 133.8, 7: 134.3, 8: 134.2, 9: 135.0, 10: 135.1, 11: 135.6
+        },
+        2025: {
+            0: 135.4
+        }
+    } as MonthlyInflationIndex,
+    
     // Historical Interest Rates (Bank of England base rate)
     interestRates: {
         // Yearly average rates (simplified)
@@ -63,6 +165,51 @@ export const GAME_DATA = {
         2015: 0.50, 2016: 0.25, 2017: 0.50, 2018: 0.75, 2019: 0.75,
         2020: 0.10, 2021: 0.10, 2022: 3.50, 2023: 5.25, 2024: 5.00
     } as InterestRates,
+    
+    // Detailed historical interest rates
+    detailedInterestRates: {
+        rates: [
+            { date: '2025-05-08', rate: 4.25 },
+            { date: '2025-02-06', rate: 4.50 },
+            { date: '2024-11-07', rate: 4.75 },
+            { date: '2024-08-01', rate: 5.00 },
+            { date: '2023-08-03', rate: 5.25 },
+            { date: '2023-06-22', rate: 5.00 },
+            { date: '2023-05-11', rate: 4.50 },
+            { date: '2023-03-23', rate: 4.25 },
+            { date: '2023-02-02', rate: 4.00 },
+            { date: '2022-12-15', rate: 3.50 },
+            { date: '2022-11-03', rate: 3.00 },
+            { date: '2022-09-22', rate: 2.25 },
+            { date: '2022-08-04', rate: 1.75 },
+            { date: '2022-06-16', rate: 1.25 },
+            { date: '2022-05-05', rate: 1.00 },
+            { date: '2022-03-17', rate: 0.75 },
+            { date: '2022-02-03', rate: 0.50 },
+            { date: '2021-12-16', rate: 0.25 },
+            { date: '2020-03-19', rate: 0.10 },
+            { date: '2020-03-11', rate: 0.25 },
+            { date: '2018-08-02', rate: 0.75 },
+            { date: '2017-11-02', rate: 0.50 },
+            { date: '2016-08-04', rate: 0.25 },
+            { date: '2009-03-05', rate: 0.50 },
+            { date: '2009-02-05', rate: 1.00 },
+            { date: '2009-01-08', rate: 1.50 },
+            { date: '2008-12-04', rate: 2.00 },
+            { date: '2008-11-06', rate: 3.00 },
+            { date: '2008-10-08', rate: 4.50 },
+            { date: '2008-04-10', rate: 5.00 },
+            { date: '2008-02-07', rate: 5.25 },
+            { date: '2007-12-06', rate: 5.50 },
+            { date: '2007-07-05', rate: 5.75 },
+            { date: '2007-05-10', rate: 5.50 },
+            { date: '2007-01-11', rate: 5.25 },
+            { date: '2006-11-09', rate: 5.00 },
+            { date: '2006-08-03', rate: 4.75 },
+            { date: '2005-08-04', rate: 4.50 },
+            { date: '2004-08-05', rate: 4.75 }
+        ]
+    } as DetailedInterestRates,
     
     // Capital Gains Tax rates (UK)
     capitalGainsTax: {
@@ -512,3 +659,26 @@ export const GAME_DATA = {
         'North West': 1.2     // More reliance on private transport
     } as const satisfies Record<Region, number>,
 } as const; 
+
+// Function to get interest rate for a specific date
+export function getInterestRate(date: Date): number {
+    const targetDate = date.toISOString().split('T')[0];
+    
+    // Find the most recent rate that is less than or equal to the target date
+    const rate = GAME_DATA.detailedInterestRates.rates.find(rate => {
+        return rate.date <= targetDate;
+    });
+    
+    // If no rate found (date is before earliest rate), return the earliest rate
+    if (!rate) {
+        return GAME_DATA.detailedInterestRates.rates[GAME_DATA.detailedInterestRates.rates.length - 1].rate;
+    }
+    
+    return rate.rate;
+}
+
+// Function to get interest rate for a specific year and month
+export function getInterestRateForYearMonth(year: number, month: number): number {
+    const date = new Date(year, month);
+    return getInterestRate(date);
+} 
