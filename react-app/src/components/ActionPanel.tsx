@@ -10,27 +10,18 @@ const ActionPanel: React.FC = () => {
         setModalTitle('Stocks');
         setModalContent(
             <div className="stocks-modal">
-                <p>Stocks functionality will be implemented here.</p>
+                <p>Stocks is coming soon.</p>
             </div>
         );
         setIsModalOpen(true);
     };
 
-    const showPropertyModal = () => {
-        setModalTitle('Property');
-        setModalContent(
-            <div className="property-modal">
-                <p>Property functionality will be implemented here.</p>
-            </div>
-        );
-        setIsModalOpen(true);
-    };
 
     const showSavingsModal = () => {
         setModalTitle('Savings');
         setModalContent(
             <div className="savings-modal">
-                <p>Savings functionality will be implemented here.</p>
+                <p>Savings is coming soon.</p>
             </div>
         );
         setIsModalOpen(true);
@@ -48,7 +39,7 @@ const ActionPanel: React.FC = () => {
         setModalTitle('Marriage');
         setModalContent(
             <div className="marriage-modal">
-                <p>Marriage functionality will be implemented here.</p>
+                <p>Marriage is coming in paid version.</p>
             </div>
         );
         setIsModalOpen(true);
@@ -58,7 +49,7 @@ const ActionPanel: React.FC = () => {
         setModalTitle('Car');
         setModalContent(
             <div className="car-modal">
-                <p>Car functionality will be implemented here.</p>
+                <p>Car is coming in paid version.</p>
             </div>
         );
         setIsModalOpen(true);
@@ -68,7 +59,27 @@ const ActionPanel: React.FC = () => {
         setModalTitle('Loans');
         setModalContent(
             <div className="loans-modal">
-                <p>Loans functionality will be implemented here.</p>
+                <p>Loans is coming in paid version.</p>
+            </div>
+        );
+        setIsModalOpen(true);
+    };
+
+    const showChildrenModal = () => {
+        setModalTitle('Children');
+        setModalContent(
+            <div className="children-modal">
+                <p>Children is coming in paid version.</p>
+            </div>
+        );
+        setIsModalOpen(true);
+    };
+
+    const showLifeStyleModal = () => {
+        setModalTitle('Life Style');
+        setModalContent(
+            <div className="life-style-modal">
+                <p>Life Style is coming soon.</p>
             </div>
         );
         setIsModalOpen(true);
@@ -78,13 +89,14 @@ const ActionPanel: React.FC = () => {
         <div className="action-panel">
             <h2>Actions</h2>
             <div className="action-buttons">
-                <button className="pixel-btn" onClick={showStocksModal}>Stocks</button>
-                <button className="pixel-btn" onClick={showPropertyModal}>Property</button>
-                <button className="pixel-btn" onClick={showSavingsModal}>Savings</button>
                 <button className="pixel-btn" onClick={showHousingModal}>Housing</button>
-                <button className="pixel-btn" onClick={showMarriageModal}>Marriage</button>
-                <button className="pixel-btn" onClick={showCarModal}>Car</button>
+                <button className="pixel-btn" onClick={showStocksModal}>Stocks</button>
+                <button className="pixel-btn" onClick={showSavingsModal}>Savings</button>
                 <button className="pixel-btn" onClick={showLoansModal}>Loans</button>
+                <button className="pixel-btn" onClick={showLifeStyleModal}>Life Style</button>
+                <button className="pixel-btn" onClick={showCarModal}>Car</button>
+                <button className="pixel-btn" onClick={showMarriageModal}>Marriage</button>
+                <button className="pixel-btn" onClick={showChildrenModal}>Children</button>
             </div>
         </div>
     );
